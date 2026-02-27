@@ -127,14 +127,11 @@ export default function Home() {
 
   const vestedLiq = vestedLiquidityData ? BigInt(vestedLiquidityData.toString()) : 0n;
   const initialLiq = initialLiquidityData ? BigInt(initialLiquidityData.toString()) : 0n;
-  const vestedPctBig = typeof vestedPct === "bigint" ? vestedPct : 0n;
-
   // Already withdrawn: % of initial that's been taken out
   const alreadyWithdrawnPct = initialLiq > 0n ? Number((vestedLiq * 10000n) / initialLiq) / 100 : 0;
 
-  // Available now: vestedPercent() applied to remaining
-  const remainingLiq = initialLiq > vestedLiq ? initialLiq - vestedLiq : 0n;
-  const availableNowPct = initialLiq > 0n ? Number((vestedPctBig * remainingLiq) / initialLiq) / 1e16 : 0;
+  // Available now: total vested so far minus what's already been withdrawn
+  const availableNowPct = Math.max(0, vestedPercentNum - alreadyWithdrawnPct);
 
   const totalVestedPct = alreadyWithdrawnPct + availableNowPct;
 
