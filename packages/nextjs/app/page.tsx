@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
 import { formatEther, parseEther } from "viem";
-import { useAccount, useWriteContract } from "wagmi";
+import { useAccount, useSimulateContract, useWriteContract } from "wagmi";
 import { useReadContract } from "wagmi";
 import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import externalContracts from "~~/contracts/externalContracts";
@@ -54,19 +54,19 @@ export default function Home() {
   });
 
   // Preview reads
-  const { data: previewClaimData } = useScaffoldReadContract({
-    contractName: "LiquidityVesting",
-    functionName: "previewClaim",
-    watch: true,
+  const vestingAbi = deployedContractData?.abi;
+  const { data: claimSimulation } = useSimulateContract({
+    address: vestingAddress,
+    abi: vestingAbi,
+    functionName: "claim",
+    account: contractOwner as `0x${string}` | undefined,
+    query: { enabled: !!isLocked && !!contractOwner && !!vestingAddress && !!vestingAbi },
   });
+  const previewClaimData = claimSimulation?.result as [bigint, bigint] | undefined;
+
   const { data: previewVestData } = useScaffoldReadContract({
     contractName: "LiquidityVesting",
     functionName: "previewVest",
-    watch: true,
-  });
-  const { data: previewClaimAndVestData } = useScaffoldReadContract({
-    contractName: "LiquidityVesting",
-    functionName: "previewClaimAndVest",
     watch: true,
   });
 
@@ -389,10 +389,11 @@ export default function Home() {
                 {claimAndVestMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {claimAndVestMining ? "Processing..." : "🔄 Claim & Vest"}
               </button>
-              {previewClaimAndVestData && (
+              {(previewClaimData || previewVestData) && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {Number(formatEther(previewClaimAndVestData[0] + previewClaimAndVestData[2])).toFixed(6)} WETH +{" "}
-                  {Number(formatEther(previewClaimAndVestData[1] + previewClaimAndVestData[3])).toFixed(2)} CLAWD total
+                  Est: {Number(formatEther((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n))).toFixed(6)}{" "}
+                  WETH + {Number(formatEther((previewClaimData?.[1] ?? 0n) + (previewVestData?.[1] ?? 0n))).toFixed(2)}{" "}
+                  CLAWD total
                 </p>
               )}
             </div>
