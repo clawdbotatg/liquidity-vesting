@@ -35,6 +35,23 @@ export default function Home() {
   });
   const { data: contractOwner } = useScaffoldReadContract({ contractName: "LiquidityVesting", functionName: "owner" });
 
+  // Preview reads
+  const { data: previewClaimData } = useScaffoldReadContract({
+    contractName: "LiquidityVesting",
+    functionName: "previewClaim",
+    watch: true,
+  });
+  const { data: previewVestData } = useScaffoldReadContract({
+    contractName: "LiquidityVesting",
+    functionName: "previewVest",
+    watch: true,
+  });
+  const { data: previewClaimAndVestData } = useScaffoldReadContract({
+    contractName: "LiquidityVesting",
+    functionName: "previewClaimAndVest",
+    watch: true,
+  });
+
   // Token balances
   const { data: wethBalance } = useReadContract({
     address: WETH_ADDRESS,
@@ -274,6 +291,12 @@ export default function Home() {
               >
                 {claimMining ? "Claiming..." : "💰 Claim Fees"}
               </button>
+              {previewClaimData && (
+                <p className="text-xs opacity-60 text-center -mt-1">
+                  Est: {Number(formatEther(previewClaimData[0])).toFixed(6)} WETH +{" "}
+                  {Number(formatEther(previewClaimData[1])).toFixed(2)} CLAWD in fees
+                </p>
+              )}
               <button
                 className={`btn btn-secondary w-full ${vestMining ? "loading" : ""}`}
                 disabled={vestMining}
@@ -281,6 +304,12 @@ export default function Home() {
               >
                 {vestMining ? "Vesting..." : "📤 Vest"}
               </button>
+              {previewVestData && (
+                <p className="text-xs opacity-60 text-center -mt-1">
+                  Est: {Number(formatEther(previewVestData[0])).toFixed(6)} WETH +{" "}
+                  {Number(formatEther(previewVestData[1])).toFixed(2)} CLAWD (~{vestedPercentNum.toFixed(1)}% vested)
+                </p>
+              )}
               <button
                 className={`btn btn-accent w-full ${claimAndVestMining ? "loading" : ""}`}
                 disabled={claimAndVestMining}
@@ -288,6 +317,12 @@ export default function Home() {
               >
                 {claimAndVestMining ? "Processing..." : "🔄 Claim & Vest"}
               </button>
+              {previewClaimAndVestData && (
+                <p className="text-xs opacity-60 text-center -mt-1">
+                  Est: {Number(formatEther(previewClaimAndVestData[0] + previewClaimAndVestData[2])).toFixed(6)} WETH +{" "}
+                  {Number(formatEther(previewClaimAndVestData[1] + previewClaimAndVestData[3])).toFixed(2)} CLAWD total
+                </p>
+              )}
             </div>
           </div>
         )}

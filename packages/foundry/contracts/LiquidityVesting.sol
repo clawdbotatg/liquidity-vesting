@@ -28,6 +28,15 @@ interface INonfungiblePositionManager {
     function positions(uint256 tokenId) external view returns (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128);
 }
 
+interface IUniswapV3Factory {
+    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address);
+}
+
+interface IUniswapV3Pool {
+    function slot0() external view returns (uint160, int24, uint16, uint16, uint16, uint8, bool);
+    function liquidity() external view returns (uint128);
+}
+
 /// @title LiquidityVesting
 /// @notice Locks WETH + CLAWD into a Uniswap V3 full-range position and vests liquidity linearly to owner
 contract LiquidityVesting is Ownable {
@@ -133,9 +142,50 @@ contract LiquidityVesting is Ownable {
         amount0 = f0 + v0; amount1 = f1 + v1;
     }
 
-    function vestedPercent() external view returns (uint256) {
+    function vestedPercent() public view returns (uint256) {
         if (!isLocked) return 0;
         uint256 elapsed = block.timestamp - lockStart;
         return elapsed >= vestDuration ? 1e18 : (elapsed * 1e18 / vestDuration);
+    }
+
+    /// @notice Preview uncollected trading fees (what claim() would return)
+    /// @dev tokensOwed only reflects fees after the last decreaseLiquidity/collect call;
+    ///      actual pending fees may be higher due to uncounted feeGrowth.
+    function previewClaim() external view returns (uint256 amount0, uint256 amount1) {
+        if (!isLocked) return (0, 0);
+        (,,,,,,,,,, uint128 tokensOwed0, uint128 tokensOwed1) =
+            positionManager.positions(tokenId);
+        return (tokensOwed0, tokensOwed1);
+    }
+
+    /// @notice Preview how many tokens vest() would return right now
+    /// @dev Proportional estimate based on pool reserves — not exact due to tick distribution
+    function previewVest() public view returns (uint256 amount0, uint256 amount1) {
+        if (!isLocked) return (0, 0);
+        uint256 pct = vestedPercent();
+        if (pct == 0) return (0, 0);
+
+        (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
+        uint128 totalVestedLiq = uint128(pct * uint256(initialLiquidity) / 1e18);
+        uint128 toLiquidate = totalVestedLiq - vestedLiquidity;
+        if (toLiquidate == 0) return (0, 0);
+
+        // Get pool and estimate proportional share
+        address pool = IUniswapV3Factory(0x33128a8fC17869897dcE68Ed026d694621f6FDfD)
+            .getPool(token0, token1, fee);
+        uint128 totalLiquidity = IUniswapV3Pool(pool).liquidity();
+        if (totalLiquidity == 0) return (0, 0);
+
+        uint256 bal0 = IERC20(token0).balanceOf(pool);
+        uint256 bal1 = IERC20(token1).balanceOf(pool);
+
+        amount0 = (bal0 * toLiquidate) / totalLiquidity;
+        amount1 = (bal1 * toLiquidate) / totalLiquidity;
+    }
+
+    /// @notice Preview what claimAndVest() would return
+    function previewClaimAndVest() external view returns (uint256 fees0, uint256 fees1, uint256 vest0, uint256 vest1) {
+        (fees0, fees1) = this.previewClaim();
+        (vest0, vest1) = previewVest();
     }
 }

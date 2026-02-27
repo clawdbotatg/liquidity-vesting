@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   8453: {
     LiquidityVesting: {
-      address: "0x1f88546d03070afa342b8a50d5c52bf058244d5f",
+      address: "0xaf43b556692d1cefea363029efebae6b028b23ba",
       abi: [
         {
           type: "constructor",
@@ -168,6 +168,70 @@ const deployedContracts = {
               name: "",
               type: "address",
               internalType: "contract INonfungiblePositionManager",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "previewClaim",
+          inputs: [],
+          outputs: [
+            {
+              name: "amount0",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "previewClaimAndVest",
+          inputs: [],
+          outputs: [
+            {
+              name: "fees0",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "fees1",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "vest0",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "vest1",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "previewVest",
+          inputs: [],
+          outputs: [
+            {
+              name: "amount0",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           stateMutability: "view",
@@ -411,7 +475,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 42714782,
+      deployedOnBlock: 42716903,
     },
   },
   31337: {
@@ -577,6 +641,70 @@ const deployedContracts = {
               name: "",
               type: "address",
               internalType: "contract INonfungiblePositionManager",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "previewClaim",
+          inputs: [],
+          outputs: [
+            {
+              name: "amount0",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "previewClaimAndVest",
+          inputs: [],
+          outputs: [
+            {
+              name: "fees0",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "fees1",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "vest0",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "vest1",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "previewVest",
+          inputs: [],
+          outputs: [
+            {
+              name: "amount0",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           stateMutability: "view",
