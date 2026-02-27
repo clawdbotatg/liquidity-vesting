@@ -42,6 +42,16 @@ export default function Home() {
     functionName: "vestDuration",
   });
   const { data: contractOwner } = useScaffoldReadContract({ contractName: "LiquidityVesting", functionName: "owner" });
+  const { data: vestedLiquidityData } = useScaffoldReadContract({
+    contractName: "LiquidityVesting",
+    functionName: "vestedLiquidity",
+    watch: true,
+  });
+  const { data: initialLiquidityData } = useScaffoldReadContract({
+    contractName: "LiquidityVesting",
+    functionName: "initialLiquidity",
+    watch: true,
+  });
 
   // Preview reads
   const { data: previewClaimData } = useScaffoldReadContract({
@@ -115,6 +125,19 @@ export default function Home() {
 
   const vestedPercentNum = vestedPct ? Number(vestedPct) / 1e16 : 0; // 0-100
 
+  const vestedLiq = vestedLiquidityData ? BigInt(vestedLiquidityData.toString()) : 0n;
+  const initialLiq = initialLiquidityData ? BigInt(initialLiquidityData.toString()) : 0n;
+  const vestedPctBig = typeof vestedPct === "bigint" ? vestedPct : 0n;
+
+  // Already withdrawn: % of initial that's been taken out
+  const alreadyWithdrawnPct = initialLiq > 0n ? Number((vestedLiq * 10000n) / initialLiq) / 100 : 0;
+
+  // Available now: vestedPercent() applied to remaining
+  const remainingLiq = initialLiq > vestedLiq ? initialLiq - vestedLiq : 0n;
+  const availableNowPct = initialLiq > 0n ? Number((vestedPctBig * remainingLiq) / initialLiq) / 1e16 : 0;
+
+  const totalVestedPct = alreadyWithdrawnPct + availableNowPct;
+
   const isWrongNetwork = connectedAddress && chain?.id !== 8453;
 
   const timeRemaining = () => {
@@ -184,15 +207,26 @@ export default function Home() {
 
           {isLocked && (
             <div className="mt-4">
+              {/* Stacked vesting progress bar */}
               <div className="flex justify-between text-sm mb-1">
-                <span>Vested</span>
-                <span>{vestedPercentNum.toFixed(2)}%</span>
+                <span className="font-medium">Vested</span>
+                <span className="text-base-content/70">{totalVestedPct.toFixed(2)}% total</span>
               </div>
-              <div className="w-full bg-base-300 rounded-full h-4">
+              <div className="w-full bg-base-300 rounded-full h-4 overflow-hidden flex">
                 <div
-                  className="bg-primary h-4 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(vestedPercentNum, 100)}%` }}
+                  className="bg-base-content/40 h-full transition-all duration-500"
+                  style={{ width: `${alreadyWithdrawnPct}%` }}
+                  title={`${alreadyWithdrawnPct.toFixed(2)}% already withdrawn`}
                 />
+                <div
+                  className="bg-success h-full transition-all duration-500"
+                  style={{ width: `${availableNowPct}%` }}
+                  title={`${availableNowPct.toFixed(2)}% available to withdraw now`}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-base-content/50 mt-1">
+                <span>⬛ {alreadyWithdrawnPct.toFixed(2)}% withdrawn</span>
+                <span>🟢 {availableNowPct.toFixed(2)}% available now</span>
               </div>
             </div>
           )}
