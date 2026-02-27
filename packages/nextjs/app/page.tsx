@@ -155,7 +155,34 @@ export default function Home() {
   const isOwner =
     connectedAddress && contractOwner && connectedAddress.toLowerCase() === (contractOwner as string).toLowerCase();
 
+  // Pool balances for CLAWD price
+  const POOL_ADDRESS = "0xCD55381a53da35Ab1D7Bc5e3fE5F76cac976FAc3" as const;
+  const { data: poolWethBal } = useReadContract({
+    address: WETH_ADDRESS,
+    abi: WETH_ABI,
+    functionName: "balanceOf",
+    args: [POOL_ADDRESS],
+  });
+  const { data: poolClawdBal } = useReadContract({
+    address: CLAWD_ADDRESS,
+    abi: CLAWD_ABI,
+    functionName: "balanceOf",
+    args: [POOL_ADDRESS],
+  });
+  const clawdUsdPrice =
+    poolWethBal && poolClawdBal && ethPrice && Number(poolClawdBal) > 0
+      ? (Number(formatEther(poolWethBal as bigint)) / Number(formatEther(poolClawdBal as bigint))) * ethPrice
+      : 0;
+
+  const usd = (amount: bigint | undefined, pricePerToken: number): string => {
+    if (!amount || !pricePerToken) return "";
+    const val = Number(formatEther(amount)) * pricePerToken;
+    if (val < 0.01) return `($${val.toFixed(4)})`;
+    return `($${val.toFixed(2)})`;
+  };
+
   const wethBalanceFormatted = wethBalance !== undefined ? Number(formatEther(wethBalance as bigint)).toFixed(6) : null;
+  const clawdBalanceFormatted = clawdBalance !== undefined ? formatEther(clawdBalance as bigint) : null;
   const wethUsd =
     wethBalanceFormatted && ethPrice ? `($${(parseFloat(wethBalanceFormatted) * ethPrice).toFixed(2)})` : "";
 
@@ -200,7 +227,12 @@ export default function Home() {
             <div>
               <span className="text-sm opacity-60">CLAWD Balance</span>
               <p className="font-bold">
-                {clawdBalance !== undefined ? Number(formatEther(clawdBalance as bigint)).toLocaleString() : "—"}
+                {clawdBalanceFormatted ? Number(clawdBalanceFormatted).toLocaleString() : "—"}
+                {clawdBalanceFormatted && clawdUsdPrice > 0 && (
+                  <span className="text-sm font-normal opacity-70 ml-1">
+                    (${(parseFloat(clawdBalanceFormatted) * clawdUsdPrice).toFixed(2)})
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -363,8 +395,9 @@ export default function Home() {
               </button>
               {previewClaimData && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {parseFloat(Number(formatEther(previewClaimData[0])).toFixed(9))} WETH +{" "}
-                  {Number(formatEther(previewClaimData[1])).toFixed(2)} CLAWD in fees
+                  Est: {parseFloat(Number(formatEther(previewClaimData[0])).toFixed(9))} WETH{" "}
+                  {usd(previewClaimData[0], ethPrice ?? 0)} + {Number(formatEther(previewClaimData[1])).toFixed(2)}{" "}
+                  CLAWD {usd(previewClaimData[1], clawdUsdPrice)} in fees
                 </p>
               )}
               <button
@@ -377,8 +410,9 @@ export default function Home() {
               </button>
               {previewVestData && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {parseFloat(Number(formatEther(previewVestData[0])).toFixed(9))} WETH +{" "}
-                  {Number(formatEther(previewVestData[1])).toFixed(2)} CLAWD (~{vestedPercentNum.toFixed(1)}% vested)
+                  Est: {parseFloat(Number(formatEther(previewVestData[0])).toFixed(9))} WETH{" "}
+                  {usd(previewVestData[0], ethPrice ?? 0)} + {Number(formatEther(previewVestData[1])).toFixed(2)} CLAWD{" "}
+                  {usd(previewVestData[1], clawdUsdPrice)} (~{vestedPercentNum.toFixed(1)}% vested)
                 </p>
               )}
               <button
@@ -395,8 +429,9 @@ export default function Home() {
                   {parseFloat(
                     Number(formatEther((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n))).toFixed(9),
                   )}{" "}
-                  WETH + {Number(formatEther((previewClaimData?.[1] ?? 0n) + (previewVestData?.[1] ?? 0n))).toFixed(2)}{" "}
-                  CLAWD total
+                  WETH {usd((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n), ethPrice ?? 0)} +{" "}
+                  {Number(formatEther((previewClaimData?.[1] ?? 0n) + (previewVestData?.[1] ?? 0n))).toFixed(2)} CLAWD{" "}
+                  {usd((previewClaimData?.[1] ?? 0n) + (previewVestData?.[1] ?? 0n), clawdUsdPrice)} total
                 </p>
               )}
             </div>
