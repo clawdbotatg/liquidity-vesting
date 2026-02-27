@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { formatEther, parseEther } from "viem";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import externalContracts from "~~/contracts/externalContracts";
-import deployedContracts from "~~/contracts/deployedContracts";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useDeployedContractInfo } from "~~/hooks/scaffold-eth";
 
-const VESTING_ADDRESS = deployedContracts[8453].LiquidityVesting.address;
 const WETH_ABI = externalContracts[8453].WETH.abi;
 const CLAWD_ABI = externalContracts[8453].CLAWD.abi;
 const WETH_ADDRESS = externalContracts[8453].WETH.address;
@@ -19,42 +18,70 @@ export default function Home() {
   const [clawdAmount, setClawdAmount] = useState("100000");
   const [vestDays, setVestDays] = useState(30);
 
+  // Get deployed contract address dynamically
+  const { data: deployedContractData } = useDeployedContractInfo({ contractName: "LiquidityVesting" });
+  const vestingAddress = deployedContractData?.address;
+
   // Read contract state
   const { data: isLocked } = useScaffoldReadContract({ contractName: "LiquidityVesting", functionName: "isLocked" });
-  const { data: vestedPct } = useScaffoldReadContract({ contractName: "LiquidityVesting", functionName: "vestedPercent" });
+  const { data: vestedPct } = useScaffoldReadContract({
+    contractName: "LiquidityVesting",
+    functionName: "vestedPercent",
+  });
   const { data: lockStart } = useScaffoldReadContract({ contractName: "LiquidityVesting", functionName: "lockStart" });
-  const { data: vestDuration } = useScaffoldReadContract({ contractName: "LiquidityVesting", functionName: "vestDuration" });
+  const { data: vestDuration } = useScaffoldReadContract({
+    contractName: "LiquidityVesting",
+    functionName: "vestDuration",
+  });
   const { data: contractOwner } = useScaffoldReadContract({ contractName: "LiquidityVesting", functionName: "owner" });
 
   // Token balances
   const { data: wethBalance } = useReadContract({
-    address: WETH_ADDRESS, abi: WETH_ABI, functionName: "balanceOf", args: [connectedAddress!],
+    address: WETH_ADDRESS,
+    abi: WETH_ABI,
+    functionName: "balanceOf",
+    args: [connectedAddress!],
     query: { enabled: !!connectedAddress },
   });
   const { data: clawdBalance } = useReadContract({
-    address: CLAWD_ADDRESS, abi: CLAWD_ABI, functionName: "balanceOf", args: [connectedAddress!],
+    address: CLAWD_ADDRESS,
+    abi: CLAWD_ABI,
+    functionName: "balanceOf",
+    args: [connectedAddress!],
     query: { enabled: !!connectedAddress },
   });
 
   // Allowances
   const { data: wethAllowance, refetch: refetchWethAllowance } = useReadContract({
-    address: WETH_ADDRESS, abi: WETH_ABI, functionName: "allowance",
-    args: [connectedAddress!, VESTING_ADDRESS],
-    query: { enabled: !!connectedAddress },
+    address: WETH_ADDRESS,
+    abi: WETH_ABI,
+    functionName: "allowance",
+    args: [connectedAddress!, vestingAddress!],
+    query: { enabled: !!connectedAddress && !!vestingAddress },
   });
   const { data: clawdAllowance, refetch: refetchClawdAllowance } = useReadContract({
-    address: CLAWD_ADDRESS, abi: CLAWD_ABI, functionName: "allowance",
-    args: [connectedAddress!, VESTING_ADDRESS],
-    query: { enabled: !!connectedAddress },
+    address: CLAWD_ADDRESS,
+    abi: CLAWD_ABI,
+    functionName: "allowance",
+    args: [connectedAddress!, vestingAddress!],
+    query: { enabled: !!connectedAddress && !!vestingAddress },
   });
 
   // Write hooks
   const { writeContractAsync: writeWeth, isPending: wethApprovePending } = useWriteContract();
   const { writeContractAsync: writeClawd, isPending: clawdApprovePending } = useWriteContract();
-  const { writeContractAsync: writeLockUp, isMining: lockUpMining } = useScaffoldWriteContract("LiquidityVesting");
-  const { writeContractAsync: writeClaim, isMining: claimMining } = useScaffoldWriteContract("LiquidityVesting");
-  const { writeContractAsync: writeVest, isMining: vestMining } = useScaffoldWriteContract("LiquidityVesting");
-  const { writeContractAsync: writeClaimAndVest, isMining: claimAndVestMining } = useScaffoldWriteContract("LiquidityVesting");
+  const { writeContractAsync: writeLockUp, isMining: lockUpMining } = useScaffoldWriteContract({
+    contractName: "LiquidityVesting",
+  });
+  const { writeContractAsync: writeClaim, isMining: claimMining } = useScaffoldWriteContract({
+    contractName: "LiquidityVesting",
+  });
+  const { writeContractAsync: writeVest, isMining: vestMining } = useScaffoldWriteContract({
+    contractName: "LiquidityVesting",
+  });
+  const { writeContractAsync: writeClaimAndVest, isMining: claimAndVestMining } = useScaffoldWriteContract({
+    contractName: "LiquidityVesting",
+  });
 
   const wethNeeded = parseEther(wethAmount || "0");
   const clawdNeeded = parseEther(clawdAmount || "0");
@@ -75,7 +102,8 @@ export default function Home() {
     return `${days}d ${hours}h ${mins}m`;
   };
 
-  const isOwner = connectedAddress && contractOwner && connectedAddress.toLowerCase() === contractOwner.toLowerCase();
+  const isOwner =
+    connectedAddress && contractOwner && connectedAddress.toLowerCase() === (contractOwner as string).toLowerCase();
 
   return (
     <div className="flex items-center flex-col flex-grow pt-10">
@@ -105,11 +133,15 @@ export default function Home() {
             </div>
             <div>
               <span className="text-sm opacity-60">WETH Balance</span>
-              <p className="font-bold">{wethBalance !== undefined ? Number(formatEther(wethBalance as bigint)).toFixed(6) : "—"}</p>
+              <p className="font-bold">
+                {wethBalance !== undefined ? Number(formatEther(wethBalance as bigint)).toFixed(6) : "—"}
+              </p>
             </div>
             <div>
               <span className="text-sm opacity-60">CLAWD Balance</span>
-              <p className="font-bold">{clawdBalance !== undefined ? Number(formatEther(clawdBalance as bigint)).toLocaleString() : "—"}</p>
+              <p className="font-bold">
+                {clawdBalance !== undefined ? Number(formatEther(clawdBalance as bigint)).toLocaleString() : "—"}
+              </p>
             </div>
           </div>
 
@@ -130,28 +162,42 @@ export default function Home() {
         </div>
 
         {/* LockUp Section */}
-        {!isLocked && isOwner && (
+        {!isLocked && isOwner && vestingAddress && (
           <div className="bg-base-200 rounded-xl p-6 mt-6">
             <h2 className="text-xl font-bold mb-4">🔒 Lock Up Liquidity</h2>
 
             <div className="space-y-4">
               <div>
-                <label className="label"><span className="label-text">WETH Amount</span></label>
+                <label className="label">
+                  <span className="label-text">WETH Amount</span>
+                </label>
                 <input
-                  type="text" className="input input-bordered w-full"
-                  value={wethAmount} onChange={e => setWethAmount(e.target.value)}
+                  type="text"
+                  className="input input-bordered w-full"
+                  value={wethAmount}
+                  onChange={e => setWethAmount(e.target.value)}
                 />
               </div>
               <div>
-                <label className="label"><span className="label-text">CLAWD Amount</span></label>
+                <label className="label">
+                  <span className="label-text">CLAWD Amount</span>
+                </label>
                 <input
-                  type="text" className="input input-bordered w-full"
-                  value={clawdAmount} onChange={e => setClawdAmount(e.target.value)}
+                  type="text"
+                  className="input input-bordered w-full"
+                  value={clawdAmount}
+                  onChange={e => setClawdAmount(e.target.value)}
                 />
               </div>
               <div>
-                <label className="label"><span className="label-text">Vest Duration (days)</span></label>
-                <select className="select select-bordered w-full" value={vestDays} onChange={e => setVestDays(Number(e.target.value))}>
+                <label className="label">
+                  <span className="label-text">Vest Duration (days)</span>
+                </label>
+                <select
+                  className="select select-bordered w-full"
+                  value={vestDays}
+                  onChange={e => setVestDays(Number(e.target.value))}
+                >
                   <option value={0.00347}>5 min (test)</option>
                   <option value={1}>1 day</option>
                   <option value={7}>7 days</option>
@@ -168,8 +214,10 @@ export default function Home() {
                   disabled={wethApprovePending}
                   onClick={async () => {
                     await writeWeth({
-                      address: WETH_ADDRESS, abi: WETH_ABI, functionName: "approve",
-                      args: [VESTING_ADDRESS, wethNeeded],
+                      address: WETH_ADDRESS,
+                      abi: WETH_ABI,
+                      functionName: "approve",
+                      args: [vestingAddress, wethNeeded],
                     });
                     setTimeout(() => refetchWethAllowance(), 2000);
                   }}
@@ -184,8 +232,10 @@ export default function Home() {
                   disabled={clawdApprovePending}
                   onClick={async () => {
                     await writeClawd({
-                      address: CLAWD_ADDRESS, abi: CLAWD_ABI, functionName: "approve",
-                      args: [VESTING_ADDRESS, clawdNeeded],
+                      address: CLAWD_ADDRESS,
+                      abi: CLAWD_ABI,
+                      functionName: "approve",
+                      args: [vestingAddress, clawdNeeded],
                     });
                     setTimeout(() => refetchClawdAllowance(), 2000);
                   }}
