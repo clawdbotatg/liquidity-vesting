@@ -363,7 +363,7 @@ export default function Home() {
               </button>
               {previewClaimData && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {Number(formatEther(previewClaimData[0])).toFixed(6)} WETH +{" "}
+                  Est: {parseFloat(Number(formatEther(previewClaimData[0])).toFixed(9))} WETH +{" "}
                   {Number(formatEther(previewClaimData[1])).toFixed(2)} CLAWD in fees
                 </p>
               )}
@@ -377,7 +377,7 @@ export default function Home() {
               </button>
               {previewVestData && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {Number(formatEther(previewVestData[0])).toFixed(6)} WETH +{" "}
+                  Est: {parseFloat(Number(formatEther(previewVestData[0])).toFixed(9))} WETH +{" "}
                   {Number(formatEther(previewVestData[1])).toFixed(2)} CLAWD (~{vestedPercentNum.toFixed(1)}% vested)
                 </p>
               )}
@@ -391,7 +391,10 @@ export default function Home() {
               </button>
               {(previewClaimData || previewVestData) && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {Number(formatEther((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n))).toFixed(6)}{" "}
+                  Est:{" "}
+                  {parseFloat(
+                    Number(formatEther((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n))).toFixed(9),
+                  )}{" "}
                   WETH + {Number(formatEther((previewClaimData?.[1] ?? 0n) + (previewVestData?.[1] ?? 0n))).toFixed(2)}{" "}
                   CLAWD total
                 </p>
