@@ -178,6 +178,9 @@ export default function Home() {
     return `($${val.toFixed(2)})`;
   };
 
+  // Format WETH amounts without scientific notation, stripping trailing zeros
+  const fmtWETH = (wei: bigint): string => Number(formatEther(wei)).toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
+
   const wethBalanceFormatted = wethBalance !== undefined ? Number(formatEther(wethBalance as bigint)).toFixed(6) : null;
   const clawdBalanceFormatted = clawdBalance !== undefined ? formatEther(clawdBalance as bigint) : null;
   const wethUsd =
@@ -392,9 +395,9 @@ export default function Home() {
               </button>
               {previewClaimData && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {parseFloat(Number(formatEther(previewClaimData[0])).toFixed(9))} WETH{" "}
-                  {usd(previewClaimData[0], ethPrice ?? 0)} + {Number(formatEther(previewClaimData[1])).toFixed(2)}{" "}
-                  CLAWD {usd(previewClaimData[1], clawdUsdPrice)} in fees
+                  Est: {fmtWETH(previewClaimData[0])} WETH {usd(previewClaimData[0], ethPrice ?? 0)} +{" "}
+                  {Number(formatEther(previewClaimData[1])).toFixed(2)} CLAWD {usd(previewClaimData[1], clawdUsdPrice)}{" "}
+                  in fees
                 </p>
               )}
               <button
@@ -407,9 +410,9 @@ export default function Home() {
               </button>
               {previewVestData && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {parseFloat(Number(formatEther(previewVestData[0])).toFixed(9))} WETH{" "}
-                  {usd(previewVestData[0], ethPrice ?? 0)} + {Number(formatEther(previewVestData[1])).toFixed(2)} CLAWD{" "}
-                  {usd(previewVestData[1], clawdUsdPrice)} (~{vestedPercentNum.toFixed(1)}% vested)
+                  Est: {fmtWETH(previewVestData[0])} WETH {usd(previewVestData[0], ethPrice ?? 0)} +{" "}
+                  {Number(formatEther(previewVestData[1])).toFixed(2)} CLAWD {usd(previewVestData[1], clawdUsdPrice)} (~
+                  {vestedPercentNum.toFixed(1)}% vested)
                 </p>
               )}
               <button
@@ -422,11 +425,8 @@ export default function Home() {
               </button>
               {(previewClaimData || previewVestData) && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est:{" "}
-                  {parseFloat(
-                    Number(formatEther((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n))).toFixed(9),
-                  )}{" "}
-                  WETH {usd((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n), ethPrice ?? 0)} +{" "}
+                  Est: {fmtWETH((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n))} WETH{" "}
+                  {usd((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n), ethPrice ?? 0)} +{" "}
                   {Number(formatEther((previewClaimData?.[1] ?? 0n) + (previewVestData?.[1] ?? 0n))).toFixed(2)} CLAWD{" "}
                   {usd((previewClaimData?.[1] ?? 0n) + (previewVestData?.[1] ?? 0n), clawdUsdPrice)} total
                 </p>
