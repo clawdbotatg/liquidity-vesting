@@ -289,7 +289,7 @@ export default function Home() {
               {/* Three-button flow */}
               {!wethApproved && (
                 <button
-                  className={`btn btn-primary w-full ${wethApprovePending ? "loading" : ""}`}
+                  className="btn btn-primary w-full"
                   disabled={wethApprovePending}
                   onClick={async () => {
                     await writeTx(() =>
@@ -303,13 +303,14 @@ export default function Home() {
                     setTimeout(() => refetchWethAllowance(), 2000);
                   }}
                 >
+                  {wethApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
                   {wethApprovePending ? "Approving WETH..." : `1️⃣ Approve ${wethAmount} WETH`}
                 </button>
               )}
 
               {wethApproved && !clawdApproved && (
                 <button
-                  className={`btn btn-primary w-full ${clawdApprovePending ? "loading" : ""}`}
+                  className="btn btn-primary w-full"
                   disabled={clawdApprovePending}
                   onClick={async () => {
                     await writeTx(() =>
@@ -323,13 +324,14 @@ export default function Home() {
                     setTimeout(() => refetchClawdAllowance(), 2000);
                   }}
                 >
+                  {clawdApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
                   {clawdApprovePending ? "Approving CLAWD..." : `2️⃣ Approve ${clawdAmount} CLAWD`}
                 </button>
               )}
 
               {wethApproved && clawdApproved && (
                 <button
-                  className={`btn btn-accent w-full ${lockUpMining ? "loading" : ""}`}
+                  className="btn btn-accent w-full"
                   disabled={lockUpMining}
                   onClick={async () => {
                     await writeLockUp({
@@ -338,6 +340,7 @@ export default function Home() {
                     });
                   }}
                 >
+                  {lockUpMining && <span className="loading loading-spinner loading-sm mr-2" />}
                   {lockUpMining ? "Locking..." : "3️⃣ Lock Up Liquidity"}
                 </button>
               )}
@@ -351,10 +354,11 @@ export default function Home() {
             <h2 className="text-xl font-bold mb-4">⚡ Actions</h2>
             <div className="space-y-3">
               <button
-                className={`btn btn-primary w-full ${claimMining ? "loading" : ""}`}
+                className="btn btn-primary w-full"
                 disabled={claimMining}
                 onClick={() => writeClaim({ functionName: "claim" })}
               >
+                {claimMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {claimMining ? "Claiming..." : "💰 Claim Fees"}
               </button>
               {previewClaimData && (
@@ -364,10 +368,11 @@ export default function Home() {
                 </p>
               )}
               <button
-                className={`btn btn-secondary w-full ${vestMining ? "loading" : ""}`}
+                className="btn btn-secondary w-full"
                 disabled={vestMining}
                 onClick={() => writeVest({ functionName: "vest", args: [BigInt(0), BigInt(0)] })}
               >
+                {vestMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {vestMining ? "Vesting..." : "📤 Vest"}
               </button>
               {previewVestData && (
@@ -377,10 +382,11 @@ export default function Home() {
                 </p>
               )}
               <button
-                className={`btn btn-accent w-full ${claimAndVestMining ? "loading" : ""}`}
+                className="btn btn-accent w-full"
                 disabled={claimAndVestMining}
                 onClick={() => writeClaimAndVest({ functionName: "claimAndVest", args: [BigInt(0), BigInt(0)] })}
               >
+                {claimAndVestMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {claimAndVestMining ? "Processing..." : "🔄 Claim & Vest"}
               </button>
               {previewClaimAndVestData && (
