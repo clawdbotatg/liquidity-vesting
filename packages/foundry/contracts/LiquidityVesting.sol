@@ -66,7 +66,13 @@ contract LiquidityVesting is Ownable {
         fee = _fee;
     }
 
-    function lockUp(uint256 amount0Desired, uint256 amount1Desired, uint256 _vestDuration) external onlyOwner {
+    /// @notice Lock tokens into a Uniswap V3 position with slippage protection
+    /// @param amount0Desired Desired amount of token0
+    /// @param amount1Desired Desired amount of token1
+    /// @param _vestDuration Vesting duration in seconds
+    /// @param amount0Min Minimum token0 accepted (0 to skip)
+    /// @param amount1Min Minimum token1 accepted (0 to skip)
+    function lockUp(uint256 amount0Desired, uint256 amount1Desired, uint256 _vestDuration, uint256 amount0Min, uint256 amount1Min) external onlyOwner {
         require(!isLocked, "Already locked");
         require(_vestDuration > 0, "Duration must be > 0");
         isLocked = true;
@@ -74,19 +80,19 @@ contract LiquidityVesting is Ownable {
 
         IERC20(token0).safeTransferFrom(msg.sender, address(this), amount0Desired);
         IERC20(token1).safeTransferFrom(msg.sender, address(this), amount1Desired);
-        IERC20(token0).approve(address(positionManager), amount0Desired);
-        IERC20(token1).approve(address(positionManager), amount1Desired);
+        IERC20(token0).forceApprove(address(positionManager), amount0Desired);
+        IERC20(token1).forceApprove(address(positionManager), amount1Desired);
 
-        _mintPosition(amount0Desired, amount1Desired);
+        _mintPosition(amount0Desired, amount1Desired, amount0Min, amount1Min);
     }
 
-    function _mintPosition(uint256 amount0Desired, uint256 amount1Desired) internal {
+    function _mintPosition(uint256 amount0Desired, uint256 amount1Desired, uint256 amount0Min, uint256 amount1Min) internal {
         (uint256 _tokenId, uint128 liquidity, uint256 used0, uint256 used1) = positionManager.mint(
             INonfungiblePositionManager.MintParams({
                 token0: token0, token1: token1, fee: fee,
                 tickLower: -887200, tickUpper: 887200,
                 amount0Desired: amount0Desired, amount1Desired: amount1Desired,
-                amount0Min: 0, amount1Min: 0,
+                amount0Min: amount0Min, amount1Min: amount1Min,
                 recipient: address(this), deadline: block.timestamp
             })
         );
@@ -95,8 +101,8 @@ contract LiquidityVesting is Ownable {
         initialLiquidity = liquidity;
         lockStart = block.timestamp;
 
-        IERC20(token0).approve(address(positionManager), 0);
-        IERC20(token1).approve(address(positionManager), 0);
+        IERC20(token0).forceApprove(address(positionManager), 0);
+        IERC20(token1).forceApprove(address(positionManager), 0);
 
         if (amount0Desired > used0) IERC20(token0).safeTransfer(msg.sender, amount0Desired - used0);
         if (amount1Desired > used1) IERC20(token1).safeTransfer(msg.sender, amount1Desired - used1);
@@ -112,7 +118,20 @@ contract LiquidityVesting is Ownable {
         emit Claimed(amount0, amount1);
     }
 
-    function vest() public onlyOwner returns (uint256 amount0, uint256 amount1) {
+    /// @notice Vest available liquidity with slippage protection
+    /// @param amount0Min Minimum token0 from decreaseLiquidity (0 to skip)
+    /// @param amount1Min Minimum token1 from decreaseLiquidity (0 to skip)
+    function vest(uint256 amount0Min, uint256 amount1Min) public onlyOwner returns (uint256 amount0, uint256 amount1) {
+        return _vest(amount0Min, amount1Min, false);
+    }
+
+    /// @notice Claim fees and vest in one call, collecting only once
+    function claimAndVest(uint256 amount0Min, uint256 amount1Min) external onlyOwner returns (uint256 amount0, uint256 amount1) {
+        return _vest(amount0Min, amount1Min, true);
+    }
+
+    /// @dev Internal vest that optionally includes fee collection
+    function _vest(uint256 amount0Min, uint256 amount1Min, bool includeFees) internal returns (uint256 amount0, uint256 amount1) {
         uint256 elapsed = block.timestamp - lockStart;
         uint256 vestedPct = elapsed >= vestDuration ? 1e18 : (elapsed * 1e18 / vestDuration);
         uint128 totalVestedLiq = uint128(vestedPct * uint256(initialLiquidity) / 1e18);
@@ -124,22 +143,29 @@ contract LiquidityVesting is Ownable {
 
         positionManager.decreaseLiquidity(INonfungiblePositionManager.DecreaseLiquidityParams({
             tokenId: tokenId, liquidity: toLiquidate,
-            amount0Min: 0, amount1Min: 0, deadline: block.timestamp
+            amount0Min: amount0Min, amount1Min: amount1Min, deadline: block.timestamp
         }));
 
+        // Single collect picks up both decreased liquidity tokens AND accrued fees
         (amount0, amount1) = positionManager.collect(INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: owner(),
             amount0Max: type(uint128).max, amount1Max: type(uint128).max
         }));
 
         if (isFinal) positionManager.burn(tokenId);
+
+        if (includeFees) {
+            emit Claimed(amount0, amount1);
+        }
         emit Vested(toLiquidate, amount0, amount1);
     }
 
-    function claimAndVest() external onlyOwner returns (uint256 amount0, uint256 amount1) {
-        (uint256 f0, uint256 f1) = claim();
-        (uint256 v0, uint256 v1) = vest();
-        amount0 = f0 + v0; amount1 = f1 + v1;
+    /// @notice Sweep stranded ERC-20 tokens (not the position NFT)
+    function sweep(address token) external onlyOwner {
+        require(token != address(positionManager), "cannot sweep position manager");
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        require(balance > 0, "nothing to sweep");
+        IERC20(token).safeTransfer(owner(), balance);
     }
 
     function vestedPercent() public view returns (uint256) {
@@ -148,9 +174,7 @@ contract LiquidityVesting is Ownable {
         return elapsed >= vestDuration ? 1e18 : (elapsed * 1e18 / vestDuration);
     }
 
-    /// @notice Preview uncollected trading fees (what claim() would return)
-    /// @dev tokensOwed only reflects fees after the last decreaseLiquidity/collect call;
-    ///      actual pending fees may be higher due to uncounted feeGrowth.
+    /// @notice Preview uncollected trading fees
     function previewClaim() external view returns (uint256 amount0, uint256 amount1) {
         if (!isLocked) return (0, 0);
         (,,,,,,,,,, uint128 tokensOwed0, uint128 tokensOwed1) =
@@ -159,7 +183,6 @@ contract LiquidityVesting is Ownable {
     }
 
     /// @notice Preview how many tokens vest() would return right now
-    /// @dev Proportional estimate based on pool reserves — not exact due to tick distribution
     function previewVest() public view returns (uint256 amount0, uint256 amount1) {
         if (!isLocked) return (0, 0);
         uint256 pct = vestedPercent();
@@ -170,7 +193,6 @@ contract LiquidityVesting is Ownable {
         uint128 toLiquidate = totalVestedLiq - vestedLiquidity;
         if (toLiquidate == 0) return (0, 0);
 
-        // Get pool and estimate proportional share
         address pool = IUniswapV3Factory(0x33128a8fC17869897dcE68Ed026d694621f6FDfD)
             .getPool(token0, token1, fee);
         uint128 totalLiquidity = IUniswapV3Pool(pool).liquidity();

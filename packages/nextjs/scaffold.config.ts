@@ -15,7 +15,7 @@ export const DEFAULT_ALCHEMY_API_KEY = "cR4WnXePioePZ5fFrnSiR";
 
 const scaffoldConfig = {
   targetNetworks: [chains.base],
-  pollingInterval: 30000,
+  pollingInterval: 3000,
   alchemyApiKey: process.env.NEXT_PUBLIC_ALCHEMY_KEY || DEFAULT_ALCHEMY_API_KEY,
   rpcOverrides: {
     [chains.base.id]: process.env.NEXT_PUBLIC_BASE_RPC || "https://mainnet.base.org",

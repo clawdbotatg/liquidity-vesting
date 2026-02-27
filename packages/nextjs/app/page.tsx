@@ -1,11 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { Address } from "@scaffold-ui/components";
+import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
 import { formatEther, parseEther } from "viem";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, useWriteContract } from "wagmi";
+import { useReadContract } from "wagmi";
+import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import externalContracts from "~~/contracts/externalContracts";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { useDeployedContractInfo } from "~~/hooks/scaffold-eth";
+import { useTransactor } from "~~/hooks/scaffold-eth";
 
 const WETH_ABI = externalContracts[8453].WETH.abi;
 const CLAWD_ABI = externalContracts[8453].CLAWD.abi;
@@ -13,10 +18,13 @@ const WETH_ADDRESS = externalContracts[8453].WETH.address;
 const CLAWD_ADDRESS = externalContracts[8453].CLAWD.address;
 
 export default function Home() {
-  const { address: connectedAddress } = useAccount();
+  const { address: connectedAddress, chain } = useAccount();
   const [wethAmount, setWethAmount] = useState("0.001");
   const [clawdAmount, setClawdAmount] = useState("100000");
   const [vestDays, setVestDays] = useState(30);
+
+  const { price: ethPrice } = useFetchNativeCurrencyPrice();
+  const writeTx = useTransactor();
 
   // Get deployed contract address dynamically
   const { data: deployedContractData } = useDeployedContractInfo({ contractName: "LiquidityVesting" });
@@ -84,9 +92,9 @@ export default function Home() {
     query: { enabled: !!connectedAddress && !!vestingAddress },
   });
 
-  // Write hooks
-  const { writeContractAsync: writeWeth, isPending: wethApprovePending } = useWriteContract();
-  const { writeContractAsync: writeClawd, isPending: clawdApprovePending } = useWriteContract();
+  // Write hooks - approvals use useTransactor for toast notifications
+  const { writeContractAsync: writeWethAsync, isPending: wethApprovePending } = useWriteContract();
+  const { writeContractAsync: writeClawdAsync, isPending: clawdApprovePending } = useWriteContract();
   const { writeContractAsync: writeLockUp, isMining: lockUpMining } = useScaffoldWriteContract({
     contractName: "LiquidityVesting",
   });
@@ -107,6 +115,8 @@ export default function Home() {
 
   const vestedPercentNum = vestedPct ? Number(vestedPct) / 1e16 : 0; // 0-100
 
+  const isWrongNetwork = connectedAddress && chain?.id !== 8453;
+
   const timeRemaining = () => {
     if (!lockStart || !vestDuration || !isLocked) return "N/A";
     const now = Math.floor(Date.now() / 1000);
@@ -122,6 +132,10 @@ export default function Home() {
   const isOwner =
     connectedAddress && contractOwner && connectedAddress.toLowerCase() === (contractOwner as string).toLowerCase();
 
+  const wethBalanceFormatted = wethBalance !== undefined ? Number(formatEther(wethBalance as bigint)).toFixed(6) : null;
+  const wethUsd =
+    wethBalanceFormatted && ethPrice ? `($${(parseFloat(wethBalanceFormatted) * ethPrice).toFixed(2)})` : "";
+
   return (
     <div className="flex items-center flex-col flex-grow pt-10">
       <div className="px-5 w-full max-w-2xl">
@@ -131,14 +145,20 @@ export default function Home() {
         </h1>
 
         {connectedAddress && (
-          <p className="text-center text-sm mt-2 opacity-50">
-            Connected: {connectedAddress.slice(0, 6)}...{connectedAddress.slice(-4)}
-          </p>
+          <div className="flex justify-center mt-2 opacity-50 text-sm">
+            <span className="mr-1">Connected:</span> <Address address={connectedAddress} />
+          </div>
         )}
 
         {/* Status Panel */}
         <div className="bg-base-200 rounded-xl p-6 mt-8">
           <h2 className="text-xl font-bold mb-4">📊 Status</h2>
+          {vestingAddress && (
+            <div className="mb-4 text-sm">
+              <span className="opacity-60">Contract: </span>
+              <Address address={vestingAddress} />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className="text-sm opacity-60">Locked</span>
@@ -151,7 +171,7 @@ export default function Home() {
             <div>
               <span className="text-sm opacity-60">WETH Balance</span>
               <p className="font-bold">
-                {wethBalance !== undefined ? Number(formatEther(wethBalance as bigint)).toFixed(6) : "—"}
+                {wethBalanceFormatted ?? "—"} {wethUsd && <span className="text-xs opacity-50">{wethUsd}</span>}
               </p>
             </div>
             <div>
@@ -178,8 +198,16 @@ export default function Home() {
           )}
         </div>
 
+        {/* Wrong network warning */}
+        {isWrongNetwork && (
+          <div className="bg-warning/20 border border-warning rounded-xl p-6 mt-6 text-center">
+            <p className="font-bold text-lg">⚠️ Wrong Network</p>
+            <p className="text-sm opacity-70 mt-2">Please switch to Base to interact with this contract.</p>
+          </div>
+        )}
+
         {/* LockUp Section */}
-        {!isLocked && isOwner && vestingAddress && (
+        {!isLocked && isOwner && vestingAddress && !isWrongNetwork && (
           <div className="bg-base-200 rounded-xl p-6 mt-6">
             <h2 className="text-xl font-bold mb-4">🔒 Lock Up Liquidity</h2>
 
@@ -230,12 +258,14 @@ export default function Home() {
                   className={`btn btn-primary w-full ${wethApprovePending ? "loading" : ""}`}
                   disabled={wethApprovePending}
                   onClick={async () => {
-                    await writeWeth({
-                      address: WETH_ADDRESS,
-                      abi: WETH_ABI,
-                      functionName: "approve",
-                      args: [vestingAddress, wethNeeded],
-                    });
+                    await writeTx(() =>
+                      writeWethAsync({
+                        address: WETH_ADDRESS,
+                        abi: WETH_ABI,
+                        functionName: "approve",
+                        args: [vestingAddress, wethNeeded],
+                      }),
+                    );
                     setTimeout(() => refetchWethAllowance(), 2000);
                   }}
                 >
@@ -248,12 +278,14 @@ export default function Home() {
                   className={`btn btn-primary w-full ${clawdApprovePending ? "loading" : ""}`}
                   disabled={clawdApprovePending}
                   onClick={async () => {
-                    await writeClawd({
-                      address: CLAWD_ADDRESS,
-                      abi: CLAWD_ABI,
-                      functionName: "approve",
-                      args: [vestingAddress, clawdNeeded],
-                    });
+                    await writeTx(() =>
+                      writeClawdAsync({
+                        address: CLAWD_ADDRESS,
+                        abi: CLAWD_ABI,
+                        functionName: "approve",
+                        args: [vestingAddress, clawdNeeded],
+                      }),
+                    );
                     setTimeout(() => refetchClawdAllowance(), 2000);
                   }}
                 >
@@ -268,7 +300,7 @@ export default function Home() {
                   onClick={async () => {
                     await writeLockUp({
                       functionName: "lockUp",
-                      args: [wethNeeded, clawdNeeded, BigInt(Math.floor(vestDays * 86400))],
+                      args: [wethNeeded, clawdNeeded, BigInt(Math.floor(vestDays * 86400)), BigInt(0), BigInt(0)],
                     });
                   }}
                 >
@@ -280,7 +312,7 @@ export default function Home() {
         )}
 
         {/* Action Buttons */}
-        {isLocked && isOwner && (
+        {isLocked && isOwner && !isWrongNetwork && (
           <div className="bg-base-200 rounded-xl p-6 mt-6">
             <h2 className="text-xl font-bold mb-4">⚡ Actions</h2>
             <div className="space-y-3">
@@ -300,7 +332,7 @@ export default function Home() {
               <button
                 className={`btn btn-secondary w-full ${vestMining ? "loading" : ""}`}
                 disabled={vestMining}
-                onClick={() => writeVest({ functionName: "vest" })}
+                onClick={() => writeVest({ functionName: "vest", args: [BigInt(0), BigInt(0)] })}
               >
                 {vestMining ? "Vesting..." : "📤 Vest"}
               </button>
@@ -313,7 +345,7 @@ export default function Home() {
               <button
                 className={`btn btn-accent w-full ${claimAndVestMining ? "loading" : ""}`}
                 disabled={claimAndVestMining}
-                onClick={() => writeClaimAndVest({ functionName: "claimAndVest" })}
+                onClick={() => writeClaimAndVest({ functionName: "claimAndVest", args: [BigInt(0), BigInt(0)] })}
               >
                 {claimAndVestMining ? "Processing..." : "🔄 Claim & Vest"}
               </button>
@@ -328,8 +360,8 @@ export default function Home() {
         )}
 
         {!connectedAddress && (
-          <div className="text-center mt-8 opacity-60">
-            <p>Connect your wallet to interact with the contract.</p>
+          <div className="text-center mt-8">
+            <RainbowKitCustomConnectButton />
           </div>
         )}
       </div>

@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   8453: {
     LiquidityVesting: {
-      address: "0xaf43b556692d1cefea363029efebae6b028b23ba",
+      address: "0x5d313662ccc366f2dd31ee367f11cbb79bb3e5c5",
       abi: [
         {
           type: "constructor",
@@ -56,7 +56,18 @@ const deployedContracts = {
         {
           type: "function",
           name: "claimAndVest",
-          inputs: [],
+          inputs: [
+            {
+              name: "amount0Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
           outputs: [
             {
               name: "amount0",
@@ -139,6 +150,16 @@ const deployedContracts = {
             },
             {
               name: "_vestDuration",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount0Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1Min",
               type: "uint256",
               internalType: "uint256",
             },
@@ -245,6 +266,19 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "sweep",
+          inputs: [
+            {
+              name: "token",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "token0",
           inputs: [],
           outputs: [
@@ -298,7 +332,18 @@ const deployedContracts = {
         {
           type: "function",
           name: "vest",
-          inputs: [],
+          inputs: [
+            {
+              name: "amount0Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
           outputs: [
             {
               name: "amount0",
@@ -475,7 +520,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 42716903,
+      deployedOnBlock: 42717541,
     },
   },
   31337: {
@@ -529,7 +574,18 @@ const deployedContracts = {
         {
           type: "function",
           name: "claimAndVest",
-          inputs: [],
+          inputs: [
+            {
+              name: "amount0Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
           outputs: [
             {
               name: "amount0",
@@ -612,6 +668,16 @@ const deployedContracts = {
             },
             {
               name: "_vestDuration",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount0Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1Min",
               type: "uint256",
               internalType: "uint256",
             },
@@ -718,6 +784,19 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "sweep",
+          inputs: [
+            {
+              name: "token",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "token0",
           inputs: [],
           outputs: [
@@ -771,7 +850,18 @@ const deployedContracts = {
         {
           type: "function",
           name: "vest",
-          inputs: [],
+          inputs: [
+            {
+              name: "amount0Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "amount1Min",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
           outputs: [
             {
               name: "amount0",

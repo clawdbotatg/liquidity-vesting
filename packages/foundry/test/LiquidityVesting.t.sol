@@ -18,7 +18,7 @@ contract LiquidityVestingTest is Test {
     uint256 constant CLAWD_AMOUNT = 500_000 * 1e18;
 
     function setUp() public {
-        vm.createSelectFork("https://base-mainnet.g.alchemy.com/v2/8GVG8WjDs-sGFRr6Rm839");
+        vm.createSelectFork(vm.envString("BASE_RPC_URL"));
         vesting = new LiquidityVesting(POSITION_MANAGER, WETH, CLAWD, POOL_FEE);
         deal(WETH, owner, WETH_AMOUNT * 100);
         deal(CLAWD, owner, CLAWD_AMOUNT * 100);
@@ -27,7 +27,7 @@ contract LiquidityVestingTest is Test {
     function _lockUp() internal {
         IERC20(WETH).approve(address(vesting), WETH_AMOUNT);
         IERC20(CLAWD).approve(address(vesting), CLAWD_AMOUNT);
-        vesting.lockUp(WETH_AMOUNT, CLAWD_AMOUNT, VEST_DURATION);
+        vesting.lockUp(WETH_AMOUNT, CLAWD_AMOUNT, VEST_DURATION, 0, 0);
     }
 
     function test_lockUp_MintsPosition() public {
@@ -46,14 +46,14 @@ contract LiquidityVestingTest is Test {
         IERC20(WETH).approve(address(vesting), WETH_AMOUNT);
         IERC20(CLAWD).approve(address(vesting), CLAWD_AMOUNT);
         vm.expectRevert("Already locked");
-        vesting.lockUp(WETH_AMOUNT, CLAWD_AMOUNT, VEST_DURATION);
+        vesting.lockUp(WETH_AMOUNT, CLAWD_AMOUNT, VEST_DURATION, 0, 0);
     }
 
     function test_vest_AtHalf() public {
         _lockUp();
         uint128 initLiq = vesting.initialLiquidity();
         vm.warp(block.timestamp + VEST_DURATION / 2);
-        (uint256 a0, uint256 a1) = vesting.vest();
+        (uint256 a0, uint256 a1) = vesting.vest(0, 0);
         assertGt(a0 + a1, 0, "Should receive tokens");
         assertApproxEqRel(vesting.vestedLiquidity(), initLiq / 2, 0.02e18, "~50% vested");
     }
@@ -62,7 +62,7 @@ contract LiquidityVestingTest is Test {
         _lockUp();
         uint256 tid = vesting.tokenId();
         vm.warp(block.timestamp + VEST_DURATION + 1);
-        vesting.vest();
+        vesting.vest(0, 0);
         assertEq(vesting.vestedLiquidity(), vesting.initialLiquidity());
         vm.expectRevert();
         INonfungiblePositionManager(POSITION_MANAGER).positions(tid);
@@ -71,26 +71,23 @@ contract LiquidityVestingTest is Test {
     function test_vest_NothingReverts() public {
         _lockUp();
         vm.expectRevert("Nothing to vest");
-        vesting.vest();
+        vesting.vest(0, 0);
     }
 
     function test_vest_Sequential() public {
         _lockUp();
         uint256 start = block.timestamp;
         uint128 initLiq = vesting.initialLiquidity();
-        // Vest at ~25%
         vm.warp(start + VEST_DURATION / 4);
-        vesting.vest();
+        vesting.vest(0, 0);
         uint128 v1 = vesting.vestedLiquidity();
         assertApproxEqRel(v1, uint256(initLiq) * 25 / 100, 0.02e18);
-        // Vest at ~75%
         vm.warp(start + (VEST_DURATION * 3) / 4);
-        vesting.vest();
+        vesting.vest(0, 0);
         uint128 v2 = vesting.vestedLiquidity();
         assertApproxEqRel(v2, uint256(initLiq) * 75 / 100, 0.02e18);
-        // Vest at 100%+
         vm.warp(start + VEST_DURATION + 1);
-        vesting.vest();
+        vesting.vest(0, 0);
         assertEq(vesting.vestedLiquidity(), initLiq);
     }
 
@@ -104,17 +101,17 @@ contract LiquidityVestingTest is Test {
     function test_claimAndVest() public {
         _lockUp();
         vm.warp(block.timestamp + VEST_DURATION);
-        vesting.claimAndVest();
+        vesting.claimAndVest(0, 0);
         assertEq(vesting.vestedLiquidity(), vesting.initialLiquidity());
     }
 
     function test_onlyOwner() public {
         _lockUp();
         vm.warp(block.timestamp + VEST_DURATION);
-        vm.prank(address(0xBAD)); vm.expectRevert(); vesting.vest();
+        vm.prank(address(0xBAD)); vm.expectRevert(); vesting.vest(0, 0);
         vm.prank(address(0xBAD)); vm.expectRevert(); vesting.claim();
-        vm.prank(address(0xBAD)); vm.expectRevert(); vesting.claimAndVest();
-        vm.prank(address(0xBAD)); vm.expectRevert(); vesting.lockUp(1, 1, 300);
+        vm.prank(address(0xBAD)); vm.expectRevert(); vesting.claimAndVest(0, 0);
+        vm.prank(address(0xBAD)); vm.expectRevert(); vesting.lockUp(1, 1, 300, 0, 0);
     }
 
     function test_vestedPercent() public {
@@ -124,5 +121,20 @@ contract LiquidityVestingTest is Test {
         assertApproxEqRel(vesting.vestedPercent(), 0.5e18, 0.01e18);
         vm.warp(block.timestamp + VEST_DURATION + 1);
         assertEq(vesting.vestedPercent(), 1e18);
+    }
+
+    function test_sweep() public {
+        _lockUp();
+        deal(WETH, address(vesting), 1 ether);
+        uint256 before = IERC20(WETH).balanceOf(owner);
+        vesting.sweep(WETH);
+        assertEq(IERC20(WETH).balanceOf(address(vesting)), 0);
+        assertEq(IERC20(WETH).balanceOf(owner), before + 1 ether);
+    }
+
+    function test_sweep_RevertOnNFT() public {
+        _lockUp();
+        vm.expectRevert("cannot sweep position manager");
+        vesting.sweep(POSITION_MANAGER);
     }
 }
