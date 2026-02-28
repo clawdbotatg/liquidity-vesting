@@ -27,7 +27,7 @@ contract LiquidityVestingTest is Test {
     function _lockUp() internal {
         IERC20(WETH).approve(address(vesting), WETH_AMOUNT);
         IERC20(CLAWD).approve(address(vesting), CLAWD_AMOUNT);
-        vesting.lockUp(WETH_AMOUNT, CLAWD_AMOUNT, VEST_DURATION, 0, 0);
+        vesting.lockUp(WETH_AMOUNT, CLAWD_AMOUNT, VEST_DURATION, int24(-887200), int24(887200), 0, 0);
     }
 
     function test_lockUp_MintsPosition() public {
@@ -46,7 +46,7 @@ contract LiquidityVestingTest is Test {
         IERC20(WETH).approve(address(vesting), WETH_AMOUNT);
         IERC20(CLAWD).approve(address(vesting), CLAWD_AMOUNT);
         vm.expectRevert("Already locked");
-        vesting.lockUp(WETH_AMOUNT, CLAWD_AMOUNT, VEST_DURATION, 0, 0);
+        vesting.lockUp(WETH_AMOUNT, CLAWD_AMOUNT, VEST_DURATION, int24(-887200), int24(887200), 0, 0);
     }
 
     function test_vest_AtHalf() public {
@@ -111,7 +111,7 @@ contract LiquidityVestingTest is Test {
         vm.prank(address(0xBAD)); vm.expectRevert(); vesting.vest(0, 0);
         vm.prank(address(0xBAD)); vm.expectRevert(); vesting.claim();
         vm.prank(address(0xBAD)); vm.expectRevert(); vesting.claimAndVest(0, 0);
-        vm.prank(address(0xBAD)); vm.expectRevert(); vesting.lockUp(1, 1, 300, 0, 0);
+        vm.prank(address(0xBAD)); vm.expectRevert(); vesting.lockUp(1, 1, 300, int24(-887200), int24(887200), 0, 0);
     }
 
     function test_vestedPercent() public {

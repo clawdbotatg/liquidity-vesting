@@ -72,7 +72,7 @@ contract LiquidityVesting is Ownable {
     /// @param _vestDuration Vesting duration in seconds
     /// @param amount0Min Minimum token0 accepted (0 to skip)
     /// @param amount1Min Minimum token1 accepted (0 to skip)
-    function lockUp(uint256 amount0Desired, uint256 amount1Desired, uint256 _vestDuration, uint256 amount0Min, uint256 amount1Min) external onlyOwner {
+    function lockUp(uint256 amount0Desired, uint256 amount1Desired, uint256 _vestDuration, int24 _tickLower, int24 _tickUpper, uint256 amount0Min, uint256 amount1Min) external onlyOwner {
         require(!isLocked, "Already locked");
         require(_vestDuration > 0, "Duration must be > 0");
         isLocked = true;
@@ -83,14 +83,14 @@ contract LiquidityVesting is Ownable {
         IERC20(token0).forceApprove(address(positionManager), amount0Desired);
         IERC20(token1).forceApprove(address(positionManager), amount1Desired);
 
-        _mintPosition(amount0Desired, amount1Desired, amount0Min, amount1Min);
+        _mintPosition(amount0Desired, amount1Desired, _tickLower, _tickUpper, amount0Min, amount1Min);
     }
 
-    function _mintPosition(uint256 amount0Desired, uint256 amount1Desired, uint256 amount0Min, uint256 amount1Min) internal {
+    function _mintPosition(uint256 amount0Desired, uint256 amount1Desired, int24 _tickLower, int24 _tickUpper, uint256 amount0Min, uint256 amount1Min) internal {
         (uint256 _tokenId, uint128 liquidity, uint256 used0, uint256 used1) = positionManager.mint(
             INonfungiblePositionManager.MintParams({
                 token0: token0, token1: token1, fee: fee,
-                tickLower: -887200, tickUpper: 887200,
+                tickLower: _tickLower, tickUpper: _tickUpper,
                 amount0Desired: amount0Desired, amount1Desired: amount1Desired,
                 amount0Min: amount0Min, amount1Min: amount1Min,
                 recipient: address(this), deadline: block.timestamp

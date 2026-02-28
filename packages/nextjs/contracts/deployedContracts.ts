@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   8453: {
     LiquidityVesting: {
-      address: "0x8cf3261a51eb6eb437d6db1369c3cf0b3514669c",
+      address: "0x9272b40f6b8c3607780ac86100db4c1f5c8f7649",
       abi: [
         {
           type: "constructor",
@@ -152,6 +152,16 @@ const deployedContracts = {
               name: "_vestDuration",
               type: "uint256",
               internalType: "uint256",
+            },
+            {
+              name: "_tickLower",
+              type: "int24",
+              internalType: "int24",
+            },
+            {
+              name: "_tickUpper",
+              type: "int24",
+              internalType: "int24",
             },
             {
               name: "amount0Min",
@@ -520,7 +530,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 42758999,
+      deployedOnBlock: 42763512,
     },
   },
   31337: {
@@ -670,6 +680,16 @@ const deployedContracts = {
               name: "_vestDuration",
               type: "uint256",
               internalType: "uint256",
+            },
+            {
+              name: "_tickLower",
+              type: "int24",
+              internalType: "int24",
+            },
+            {
+              name: "_tickUpper",
+              type: "int24",
+              internalType: "int24",
             },
             {
               name: "amount0Min",

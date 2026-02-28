@@ -764,7 +764,15 @@ export default function Home() {
                   onClick={() =>
                     writeLockUp({
                       functionName: "lockUp",
-                      args: [wethNeeded, clawdNeeded, BigInt(Math.floor(vestDays * 86400)), 0n, 0n],
+                      args: [
+                        wethNeeded,
+                        clawdNeeded,
+                        BigInt(Math.floor(vestDays * 86400)),
+                        tickLower,
+                        tickUpper,
+                        0n,
+                        0n,
+                      ],
                     })
                   }
                 >
