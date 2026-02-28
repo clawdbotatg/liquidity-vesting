@@ -593,7 +593,17 @@ export default function Home() {
               <button
                 className="btn btn-secondary w-full"
                 disabled={vestMining}
-                onClick={() => writeAndOpen(() => writeVest({ functionName: "vest", args: [BigInt(0), BigInt(0)] }))}
+                onClick={() =>
+                  writeAndOpen(() =>
+                    writeVest({
+                      functionName: "vest",
+                      args: [
+                        previewVestAmounts ? (previewVestAmounts[0] * 95n) / 100n : 0n,
+                        previewVestAmounts ? (previewVestAmounts[1] * 95n) / 100n : 0n,
+                      ],
+                    }),
+                  )
+                }
               >
                 {vestMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {vestMining ? "Vesting..." : "📤 Vest"}
@@ -610,7 +620,15 @@ export default function Home() {
                 className="btn btn-accent w-full"
                 disabled={claimAndVestMining}
                 onClick={() =>
-                  writeAndOpen(() => writeClaimAndVest({ functionName: "claimAndVest", args: [BigInt(0), BigInt(0)] }))
+                  writeAndOpen(() =>
+                    writeClaimAndVest({
+                      functionName: "claimAndVest",
+                      args: [
+                        previewVestAmounts ? (previewVestAmounts[0] * 95n) / 100n : 0n,
+                        previewVestAmounts ? (previewVestAmounts[1] * 95n) / 100n : 0n,
+                      ],
+                    }),
+                  )
                 }
               >
                 {claimAndVestMining && <span className="loading loading-spinner loading-sm mr-2" />}
@@ -815,8 +833,8 @@ export default function Home() {
                         BigInt(Math.floor(vestDays * 86400)),
                         tickLower,
                         tickUpper,
-                        0n,
-                        0n,
+                        (wethNeeded * 95n) / 100n,
+                        (clawdNeeded * 95n) / 100n,
                       ],
                     })
                   }
