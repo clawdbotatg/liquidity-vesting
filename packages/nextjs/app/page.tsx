@@ -234,21 +234,14 @@ export default function Home() {
   const wethUsd =
     wethBalanceFormatted && ethPrice ? `($${(parseFloat(wethBalanceFormatted) * ethPrice).toFixed(2)})` : "";
 
-  // Fix 1: When not connected, show ONLY the connect button
-  if (!connectedAddress) {
-    return (
-      <div className="flex items-center justify-center flex-grow pt-10">
-        <RainbowKitCustomConnectButton />
-      </div>
-    );
-  }
-
   return (
     <div className="flex items-center flex-col flex-grow pt-10">
       <div className="px-5 w-full max-w-2xl">
-        <div className="flex justify-center mt-2 opacity-50 text-sm">
-          <span className="mr-1">Connected:</span> <Address address={connectedAddress} />
-        </div>
+        {connectedAddress && (
+          <div className="flex justify-center mt-2 opacity-50 text-sm">
+            <span className="mr-1">Connected:</span> <Address address={connectedAddress} />
+          </div>
+        )}
 
         {/* Status Panel */}
         <div className="bg-base-200 rounded-xl p-6 mt-8">
@@ -454,6 +447,14 @@ export default function Home() {
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Connect CTA — shown when not connected */}
+        {!connectedAddress && (
+          <div className="bg-base-200 rounded-xl p-6 mt-6 text-center">
+            <p className="text-sm opacity-60 mb-4">Connect your wallet to claim fees and vest liquidity</p>
+            <RainbowKitCustomConnectButton />
           </div>
         )}
 
