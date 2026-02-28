@@ -592,7 +592,7 @@ export default function Home() {
               )}
               <button
                 className="btn btn-secondary w-full"
-                disabled={vestMining}
+                disabled={vestMining || (availableNowPct > 0 && !previewVestAmounts)}
                 onClick={() =>
                   writeAndOpen(() =>
                     writeVest({
@@ -618,7 +618,7 @@ export default function Home() {
               )}
               <button
                 className="btn btn-accent w-full"
-                disabled={claimAndVestMining}
+                disabled={claimAndVestMining || (availableNowPct > 0 && !previewVestAmounts)}
                 onClick={() =>
                   writeAndOpen(() =>
                     writeClaimAndVest({
