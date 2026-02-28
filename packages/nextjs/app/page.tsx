@@ -59,6 +59,39 @@ function fmtMultiplier(tick: number, clawdPerWeth: number): string {
   return `${ratio.toFixed(2)}x`;
 }
 
+// Convert a Uniswap V3 tick to sqrtPriceX96 as bigint
+function tickToSqrtPriceX96(tick: number): bigint {
+  const sqrtPrice = Math.sqrt(Math.pow(1.0001, tick));
+  return BigInt(Math.floor(sqrtPrice * 2 ** 96));
+}
+
+// Uniswap V3 LiquidityAmounts: compute token amounts for a given liquidity
+// Returns [amount0 (WETH), amount1 (CLAWD)]
+function getAmountsForLiquidity(
+  sqrtPriceX96: bigint,
+  tickLowerPos: number,
+  tickUpperPos: number,
+  liquidity: bigint,
+): [bigint, bigint] {
+  if (liquidity === 0n) return [0n, 0n];
+  const Q96 = 2n ** 96n;
+  const sqrtLower = tickToSqrtPriceX96(tickLowerPos);
+  const sqrtUpper = tickToSqrtPriceX96(tickUpperPos);
+
+  if (sqrtPriceX96 <= sqrtLower) {
+    // Current price below range: all token0
+    return [(liquidity * (sqrtUpper - sqrtLower) * Q96) / sqrtLower / sqrtUpper, 0n];
+  } else if (sqrtPriceX96 < sqrtUpper) {
+    // Current price in range
+    const amount0 = (liquidity * (sqrtUpper - sqrtPriceX96) * Q96) / sqrtPriceX96 / sqrtUpper;
+    const amount1 = (liquidity * (sqrtPriceX96 - sqrtLower)) / Q96;
+    return [amount0, amount1];
+  } else {
+    // Current price above range: all token1
+    return [0n, (liquidity * (sqrtUpper - sqrtLower)) / Q96];
+  }
+}
+
 export default function Home() {
   const { address: connectedAddress, chain, connector } = useAccount();
   const { switchChain } = useSwitchChain();
@@ -103,11 +136,7 @@ export default function Home() {
   });
   const previewClaimData = claimSimulation?.result as [bigint, bigint] | undefined;
 
-  const { data: previewVestData } = useScaffoldReadContract({
-    contractName: "LiquidityVesting",
-    functionName: "previewVest",
-    watch: true,
-  });
+  // previewVest contract view removed — replaced by local previewVestAmounts computation
 
   const { writeContractAsync: writeClaim, isMining: claimMining } = useScaffoldWriteContract({
     contractName: "LiquidityVesting",
@@ -277,19 +306,34 @@ export default function Home() {
         })()
       : 0;
 
-  // Compute locked token amounts from position liquidity + current price
-  // For full-range: amount0 = liquidity * 2^96 / sqrtPriceX96, amount1 = liquidity * sqrtPriceX96 / 2^96
+  // Compute locked token amounts from position liquidity + current price (tick-aware)
   let lockedWeth: bigint | null = null;
   let lockedClawd: bigint | null = null;
   if (positionData && slot0Data) {
     const liquidity = positionData[7] as bigint;
     const sqrtPriceX96 = slot0Data[0] as bigint;
+    const tickLowerPos = positionData[5] as number;
+    const tickUpperPos = positionData[6] as number;
     if (liquidity > 0n && sqrtPriceX96 > 0n) {
-      const Q96 = 2n ** 96n;
-      lockedWeth = (liquidity * Q96) / sqrtPriceX96;
-      lockedClawd = (liquidity * sqrtPriceX96) / Q96;
+      const [w, c] = getAmountsForLiquidity(sqrtPriceX96, tickLowerPos, tickUpperPos, liquidity);
+      lockedWeth = w;
+      lockedClawd = c;
     }
   }
+
+  // Compute previewVest amounts using proper LiquidityAmounts math
+  // Replaces the broken previewVest() contract view which uses wrong pool-ratio formula
+  const previewVestAmounts: [bigint, bigint] | null = (() => {
+    if (!isLocked || !positionData || !slot0Data || !vestedPct || !initialLiquidityData) return null;
+    const sqrtPriceX96 = slot0Data[0] as bigint;
+    const tickLowerPos = positionData[5] as number;
+    const tickUpperPos = positionData[6] as number;
+    const vestedPctBn = BigInt(vestedPct.toString());
+    const totalVestedLiq = (vestedPctBn * initialLiq) / BigInt(1e18);
+    const toLiquidate = totalVestedLiq > vestedLiq ? totalVestedLiq - vestedLiq : 0n;
+    if (toLiquidate === 0n) return null;
+    return getAmountsForLiquidity(sqrtPriceX96, tickLowerPos, tickUpperPos, toLiquidate);
+  })();
 
   // CLAWD per WETH ratio from sqrtPriceX96 — correct way for V3 full-range positions
   // price = (sqrtPriceX96 / 2^96)^2 = CLAWD per WETH (both 18 decimals, WETH=token0)
@@ -554,10 +598,11 @@ export default function Home() {
                 {vestMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {vestMining ? "Vesting..." : "📤 Vest"}
               </button>
-              {previewVestData && (
+              {previewVestAmounts && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {fmtWETH(previewVestData[0])} WETH {usd(previewVestData[0], ethPrice ?? 0)} +{" "}
-                  {Number(formatEther(previewVestData[1])).toFixed(2)} CLAWD {usd(previewVestData[1], clawdUsdPrice)} (~
+                  Est: {fmtWETH(previewVestAmounts[0])} WETH {usd(previewVestAmounts[0], ethPrice ?? 0)} +{" "}
+                  {Number(formatEther(previewVestAmounts[1])).toFixed(2)} CLAWD{" "}
+                  {usd(previewVestAmounts[1], clawdUsdPrice)} (~
                   {vestedPercentNum.toFixed(1)}% vested)
                 </p>
               )}
@@ -571,12 +616,12 @@ export default function Home() {
                 {claimAndVestMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {claimAndVestMining ? "Processing..." : "🔄 Claim & Vest"}
               </button>
-              {(previewClaimData || previewVestData) && (
+              {(previewClaimData || previewVestAmounts) && (
                 <p className="text-xs opacity-60 text-center -mt-1">
-                  Est: {fmtWETH((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n))} WETH{" "}
-                  {usd((previewClaimData?.[0] ?? 0n) + (previewVestData?.[0] ?? 0n), ethPrice ?? 0)} +{" "}
-                  {Number(formatEther((previewClaimData?.[1] ?? 0n) + (previewVestData?.[1] ?? 0n))).toFixed(2)} CLAWD{" "}
-                  {usd((previewClaimData?.[1] ?? 0n) + (previewVestData?.[1] ?? 0n), clawdUsdPrice)} total
+                  Est: {fmtWETH((previewClaimData?.[0] ?? 0n) + (previewVestAmounts?.[0] ?? 0n))} WETH{" "}
+                  {usd((previewClaimData?.[0] ?? 0n) + (previewVestAmounts?.[0] ?? 0n), ethPrice ?? 0)} +{" "}
+                  {Number(formatEther((previewClaimData?.[1] ?? 0n) + (previewVestAmounts?.[1] ?? 0n))).toFixed(2)}{" "}
+                  CLAWD {usd((previewClaimData?.[1] ?? 0n) + (previewVestAmounts?.[1] ?? 0n), clawdUsdPrice)} total
                 </p>
               )}
             </div>
