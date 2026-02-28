@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
 import { formatEther, parseEther } from "viem";
@@ -220,6 +220,35 @@ export default function Home() {
       ? (Number(formatEther(poolWethBal as bigint)) / Number(formatEther(poolClawdBal as bigint))) * ethPrice
       : 0;
 
+  // CLAWD per WETH ratio from pool reserves — used to keep lock-up inputs in sync
+  const poolRatio =
+    poolWethBal && poolClawdBal && Number(poolWethBal) > 0
+      ? Number(formatEther(poolClawdBal as bigint)) / Number(formatEther(poolWethBal as bigint))
+      : null;
+
+  const handleWethChange = (val: string) => {
+    setWethAmount(val);
+    if (poolRatio && val !== "" && !isNaN(parseFloat(val))) {
+      setClawdAmount(Math.round(parseFloat(val) * poolRatio).toString());
+    }
+  };
+
+  const handleClawdChange = (val: string) => {
+    setClawdAmount(val);
+    if (poolRatio && val !== "" && !isNaN(parseFloat(val))) {
+      setWethAmount((parseFloat(val) / poolRatio).toFixed(6));
+    }
+  };
+
+  // Once pool ratio loads, sync default CLAWD amount to match default WETH amount
+  useEffect(() => {
+    if (poolRatio && wethAmount && !isNaN(parseFloat(wethAmount))) {
+      setClawdAmount(Math.round(parseFloat(wethAmount) * poolRatio).toString());
+    }
+    // Only run once when ratio first becomes available
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poolRatio !== null]);
+
   const usd = (amount: bigint | undefined, pricePerToken: number): string => {
     if (!amount || !pricePerToken) return "";
     const val = Number(formatEther(amount)) * pricePerToken;
@@ -330,7 +359,7 @@ export default function Home() {
                   type="text"
                   className="input input-bordered w-full"
                   value={wethAmount}
-                  onChange={e => setWethAmount(e.target.value)}
+                  onChange={e => handleWethChange(e.target.value)}
                 />
                 {ethPrice && wethAmount && (
                   <p className="text-xs opacity-50 mt-1">
@@ -346,7 +375,7 @@ export default function Home() {
                   type="text"
                   className="input input-bordered w-full"
                   value={clawdAmount}
-                  onChange={e => setClawdAmount(e.target.value)}
+                  onChange={e => handleClawdChange(e.target.value)}
                 />
                 {clawdUsdPrice > 0 && clawdAmount && (
                   <p className="text-xs opacity-50 mt-1">
