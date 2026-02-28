@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { parseUnits } from "viem";
-import { useAccount } from "wagmi";
+import { formatEther, parseUnits } from "viem";
+import { base } from "viem/chains";
+import { useAccount, useSwitchChain } from "wagmi";
+import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
+import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 const TICK_SPACING = 200;
@@ -48,7 +51,13 @@ function clawdToWeth(
 }
 
 export default function LPPage() {
-  const { address: connectedAddress } = useAccount();
+  const { address: connectedAddress, chain } = useAccount();
+  const { switchChain } = useSwitchChain();
+  const { price: ethPrice } = useFetchNativeCurrencyPrice();
+
+  const [wethApprovePending, setWethApprovePending] = useState(false);
+  const [clawdApprovePending, setClawdApprovePending] = useState(false);
+  const [mintPending, setMintPending] = useState(false);
 
   const { data: slot0 } = useScaffoldReadContract({
     contractName: "UniswapV3Pool",
@@ -58,6 +67,19 @@ export default function LPPage() {
   const sqrtPriceX96 = slot0?.[0];
   const sqrtPriceCurrent = sqrtPriceX96 ? Number(sqrtPriceX96) / 2 ** 96 : 0;
   const currentPrice = sqrtPriceCurrent * sqrtPriceCurrent;
+
+  // CLAWD USD price from pool
+  const clawdUsdPrice =
+    slot0 && ethPrice
+      ? (() => {
+          const sqrtPX96 = slot0[0] as bigint;
+          const Q96 = 2n ** 96n;
+          const SCALE = 10n ** 18n;
+          const ratioScaled = (sqrtPX96 * sqrtPX96 * SCALE) / (Q96 * Q96);
+          const clawdPerWeth = Number(ratioScaled) / 1e18;
+          return clawdPerWeth > 0 ? ethPrice / clawdPerWeth : 0;
+        })()
+      : 0;
 
   const [tickLower, setTickLower] = useState<number>(0);
   const [tickUpper, setTickUpper] = useState<number>(0);
@@ -128,42 +150,55 @@ export default function LPPage() {
   const needClawdApproval = clawdAllowance !== undefined && clawdAmountBn > 0n && clawdAllowance < clawdAmountBn;
 
   const handleApproveWeth = async () => {
-    await writeWeth({ functionName: "approve", args: [NPM_ADDRESS, wethAmountBn] });
+    setWethApprovePending(true);
+    try {
+      await writeWeth({ functionName: "approve", args: [NPM_ADDRESS, wethAmountBn] });
+    } finally {
+      setWethApprovePending(false);
+    }
   };
 
   const handleApproveClawd = async () => {
-    await writeClawd({ functionName: "approve", args: [NPM_ADDRESS, clawdAmountBn] });
+    setClawdApprovePending(true);
+    try {
+      await writeClawd({ functionName: "approve", args: [NPM_ADDRESS, clawdAmountBn] });
+    } finally {
+      setClawdApprovePending(false);
+    }
   };
 
   const handleMint = async () => {
     if (!connectedAddress) return;
-    const result = await writeNPM({
-      functionName: "mint",
-      args: [
-        {
-          token0: WETH_ADDRESS,
-          token1: CLAWD_ADDRESS,
-          fee: 10000,
-          tickLower,
-          tickUpper,
-          amount0Desired: wethAmountBn,
-          amount1Desired: clawdAmountBn,
-          amount0Min: (wethAmountBn * 95n) / 100n,
-          amount1Min: (clawdAmountBn * 95n) / 100n,
-          recipient: connectedAddress,
-          deadline: BigInt(Math.floor(Date.now() / 1000) + 300),
-        },
-      ],
-    });
-    setSuccessMsg(`✅ Position created! TX: ${result}`);
+    setMintPending(true);
+    try {
+      const result = await writeNPM({
+        functionName: "mint",
+        args: [
+          {
+            token0: WETH_ADDRESS,
+            token1: CLAWD_ADDRESS,
+            fee: 10000,
+            tickLower,
+            tickUpper,
+            amount0Desired: wethAmountBn,
+            amount1Desired: clawdAmountBn,
+            amount0Min: (wethAmountBn * 95n) / 100n,
+            amount1Min: (clawdAmountBn * 95n) / 100n,
+            recipient: connectedAddress,
+            deadline: BigInt(Math.floor(Date.now() / 1000) + 300),
+          },
+        ],
+      });
+      setSuccessMsg(`✅ Position created! TX: ${result}`);
+    } finally {
+      setMintPending(false);
+    }
   };
+
+  const isWrongNetwork = connectedAddress && chain?.id !== 8453;
 
   return (
     <div className="flex flex-col items-center pt-10 px-4">
-      <h1 className="text-4xl font-bold mb-8" style={{ color: "#e8481a" }}>
-        🦞 Add Liquidity
-      </h1>
-
       <div className="w-full max-w-lg space-y-6">
         {/* Current Price */}
         <div className="bg-base-200 rounded-xl p-4 text-center">
@@ -186,8 +221,7 @@ export default function LPPage() {
                 const v = Number(e.target.value);
                 if (v < tickUpper) setTickLower(v);
               }}
-              className="range w-full"
-              style={{ accentColor: "#e8481a" }}
+              className="range range-primary w-full"
             />
           </div>
           <div>
@@ -203,8 +237,7 @@ export default function LPPage() {
                 const v = Number(e.target.value);
                 if (v > tickLower) setTickUpper(v);
               }}
-              className="range w-full"
-              style={{ accentColor: "#e8481a" }}
+              className="range range-primary w-full"
             />
           </div>
         </div>
@@ -224,6 +257,11 @@ export default function LPPage() {
                 recalc("weth", e.target.value, clawdInput);
               }}
             />
+            {ethPrice && wethInput && (
+              <p className="text-xs opacity-50 mt-1">
+                ≈ ${(parseFloat(wethInput || "0") * ethPrice).toFixed(2)} USD
+              </p>
+            )}
           </div>
           <div>
             <label className="text-sm font-semibold">CLAWD Amount</label>
@@ -238,37 +276,53 @@ export default function LPPage() {
                 recalc("clawd", wethInput, e.target.value);
               }}
             />
+            {clawdUsdPrice > 0 && clawdInput && (
+              <p className="text-xs opacity-50 mt-1">
+                ≈ ${(parseFloat(clawdInput || "0") * clawdUsdPrice).toFixed(4)} USD
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Four-state button flow: Connect → Network → Approve → Action */}
         <div className="space-y-2">
-          {needWethApproval && (
+          {!connectedAddress ? (
+            <div className="flex justify-center">
+              <RainbowKitCustomConnectButton />
+            </div>
+          ) : isWrongNetwork ? (
             <button
-              className="btn btn-block"
-              style={{ backgroundColor: "#e8481a", color: "white" }}
+              className="btn btn-warning w-full"
+              onClick={() => switchChain({ chainId: base.id })}
+            >
+              Switch to Base
+            </button>
+          ) : needWethApproval ? (
+            <button
+              className="btn btn-primary w-full"
+              disabled={wethApprovePending}
               onClick={handleApproveWeth}
             >
-              Approve WETH
+              {wethApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
+              {wethApprovePending ? "Approving WETH..." : "1️⃣ Approve WETH"}
             </button>
-          )}
-          {needClawdApproval && (
+          ) : needClawdApproval ? (
             <button
-              className="btn btn-block"
-              style={{ backgroundColor: "#e8481a", color: "white" }}
+              className="btn btn-primary w-full"
+              disabled={clawdApprovePending}
               onClick={handleApproveClawd}
             >
-              Approve CLAWD
+              {clawdApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
+              {clawdApprovePending ? "Approving CLAWD..." : "2️⃣ Approve CLAWD"}
             </button>
-          )}
-          {!needWethApproval && !needClawdApproval && (
+          ) : (
             <button
-              className="btn btn-block"
-              style={{ backgroundColor: "#e8481a", color: "white" }}
-              disabled={!connectedAddress || wethAmountBn === 0n}
+              className="btn btn-accent w-full"
+              disabled={mintPending || wethAmountBn === 0n}
               onClick={handleMint}
             >
-              Add Liquidity
+              {mintPending && <span className="loading loading-spinner loading-sm mr-2" />}
+              {mintPending ? "Adding Liquidity..." : "3️⃣ Add Liquidity"}
             </button>
           )}
         </div>
