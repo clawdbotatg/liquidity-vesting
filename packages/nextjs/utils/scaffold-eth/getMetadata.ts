@@ -3,13 +3,13 @@ import type { Metadata } from "next";
 const baseUrl =
   process.env.NEXT_PUBLIC_APP_URL ||
   (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null) ||
-  "https://bafybeigxnfhyvomwdu7xeu3cgs7uj7tbslb6pct72cejrdoqbkaeg7chim.ipfs.community.bgipfs.com";
+  "https://liqvest.clawdbotatg.eth.link";
 const titleTemplate = "%s | Liquidity Vesting";
 
 export const getMetadata = ({
   title,
   description,
-  imageRelativePath = "/thumbnail.jpg",
+  imageRelativePath = "/thumbnail.png",
 }: {
   title: string;
   description: string;
