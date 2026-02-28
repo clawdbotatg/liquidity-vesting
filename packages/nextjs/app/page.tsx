@@ -549,12 +549,11 @@ export default function Home() {
           </div>
         )}
 
-        {/* Not owner notice — shown when connected but not the owner */}
-        {connectedAddress && !isOwner && contractOwner && (
+        {/* Owner display — shown whenever the connected wallet is not the owner (including not connected) */}
+        {!isOwner && contractOwner && (
           <div className="bg-base-200 rounded-xl p-6 mt-6 text-center">
-            <p className="text-sm opacity-60 mb-2">Actions are restricted to the owner</p>
+            <p className="text-sm opacity-60 mb-2">Owner</p>
             <div className="flex items-center justify-center gap-2">
-              <span className="text-sm opacity-60">Owner:</span>
               <Address address={contractOwner as `0x${string}`} />
             </div>
           </div>
