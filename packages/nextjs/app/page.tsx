@@ -264,11 +264,11 @@ export default function Home() {
   // Read current pool price
   const POOL_ADDRESS = "0xCD55381a53da35Ab1D7Bc5e3fE5F76cac976FAc3" as const;
 
+  // Always fetch slot0 — needed for lock-up form ratio even before locking
   const { data: slot0Data } = useReadContract({
     address: POOL_ADDRESS,
     abi: SLOT0_ABI,
     functionName: "slot0",
-    query: { enabled: !!isLocked },
   });
   const { data: poolWethBal } = useReadContract({
     address: WETH_ADDRESS,
@@ -301,11 +301,17 @@ export default function Home() {
     }
   }
 
-  // CLAWD per WETH ratio from pool reserves — used to keep lock-up inputs in sync
-  const poolRatio =
-    poolWethBal && poolClawdBal && Number(poolWethBal) > 0
-      ? Number(formatEther(poolClawdBal as bigint)) / Number(formatEther(poolWethBal as bigint))
-      : null;
+  // CLAWD per WETH ratio from sqrtPriceX96 — correct way for V3 full-range positions
+  // price = (sqrtPriceX96 / 2^96)^2 = CLAWD per WETH (both 18 decimals, WETH=token0)
+  const poolRatio = slot0Data
+    ? (() => {
+        const sqrtPriceX96 = slot0Data[0] as bigint;
+        const Q96 = 2n ** 96n;
+        const SCALE = 10n ** 18n;
+        const ratioScaled = (sqrtPriceX96 * sqrtPriceX96 * SCALE) / (Q96 * Q96);
+        return Number(ratioScaled) / 1e18;
+      })()
+    : null;
 
   const handleWethChange = (val: string) => {
     setWethAmount(val);
