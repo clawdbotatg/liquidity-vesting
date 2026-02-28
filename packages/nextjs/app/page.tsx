@@ -3,19 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
-import { formatEther, parseEther, parseUnits } from "viem";
+import { formatEther, parseUnits } from "viem";
 import { base } from "viem/chains";
-import { useAccount, useSimulateContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { useAccount, useSimulateContract, useSwitchChain } from "wagmi";
 import { useReadContract } from "wagmi";
 import { WalletBalances } from "~~/components/WalletBalances";
 import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import externalContracts from "~~/contracts/externalContracts";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { useDeployedContractInfo } from "~~/hooks/scaffold-eth";
-import { useTransactor } from "~~/hooks/scaffold-eth";
 
-const WETH_ABI = externalContracts[8453].WETH.abi;
-const CLAWD_ABI = externalContracts[8453].CLAWD.abi;
 const WETH_ADDRESS = externalContracts[8453].WETH.address;
 const CLAWD_ADDRESS = externalContracts[8453].CLAWD.address;
 
@@ -64,12 +61,8 @@ function fmtMultiplier(tick: number, clawdPerWeth: number): string {
 export default function Home() {
   const { address: connectedAddress, chain, connector } = useAccount();
   const { switchChain } = useSwitchChain();
-  const [wethAmount, setWethAmount] = useState("0.001");
-  const [clawdAmount, setClawdAmount] = useState("100000");
-  const [vestDays, setVestDays] = useState(30);
 
   const { price: ethPrice } = useFetchNativeCurrencyPrice();
-  const writeTx = useTransactor();
 
   // Get deployed contract address dynamically
   const { data: deployedContractData } = useDeployedContractInfo({ contractName: "LiquidityVesting" });
@@ -115,32 +108,6 @@ export default function Home() {
     watch: true,
   });
 
-  // Allowances
-  const { data: wethAllowance, refetch: refetchWethAllowance } = useReadContract({
-    address: WETH_ADDRESS,
-    abi: WETH_ABI,
-    functionName: "allowance",
-    args: [connectedAddress!, vestingAddress!],
-    query: { enabled: !!connectedAddress && !!vestingAddress },
-  });
-  const { data: clawdAllowance, refetch: refetchClawdAllowance } = useReadContract({
-    address: CLAWD_ADDRESS,
-    abi: CLAWD_ABI,
-    functionName: "allowance",
-    args: [connectedAddress!, vestingAddress!],
-    query: { enabled: !!connectedAddress && !!vestingAddress },
-  });
-
-  // Write hooks
-  const { writeContractAsync: writeWethAsync, isPending: wethWritePending, data: wethTxHash } = useWriteContract();
-  const { writeContractAsync: writeClawdAsync, isPending: clawdWritePending, data: clawdTxHash } = useWriteContract();
-  const { isLoading: wethTxMining } = useWaitForTransactionReceipt({ hash: wethTxHash });
-  const { isLoading: clawdTxMining } = useWaitForTransactionReceipt({ hash: clawdTxHash });
-  const wethApprovePending = wethWritePending || wethTxMining;
-  const clawdApprovePending = clawdWritePending || clawdTxMining;
-  const { writeContractAsync: writeLockUp, isMining: lockUpMining } = useScaffoldWriteContract({
-    contractName: "LiquidityVesting",
-  });
   const { writeContractAsync: writeClaim, isMining: claimMining } = useScaffoldWriteContract({
     contractName: "LiquidityVesting",
   });
@@ -199,11 +166,6 @@ export default function Home() {
     },
     [openWallet],
   );
-
-  const wethNeeded = parseEther(wethAmount || "0");
-  const clawdNeeded = parseEther(clawdAmount || "0");
-  const wethApproved = wethAllowance !== undefined && (wethAllowance as bigint) >= wethNeeded;
-  const clawdApproved = clawdAllowance !== undefined && (clawdAllowance as bigint) >= clawdNeeded;
 
   const vestedPercentNum = vestedPct ? Number(vestedPct) / 1e16 : 0; // 0-100
 
@@ -339,29 +301,6 @@ export default function Home() {
         return Number(ratioScaled) / 1e18;
       })()
     : null;
-
-  const handleWethChange = (val: string) => {
-    setWethAmount(val);
-    if (poolRatio && val !== "" && !isNaN(parseFloat(val))) {
-      setClawdAmount(Math.round(parseFloat(val) * poolRatio).toString());
-    }
-  };
-
-  const handleClawdChange = (val: string) => {
-    setClawdAmount(val);
-    if (poolRatio && val !== "" && !isNaN(parseFloat(val))) {
-      setWethAmount((parseFloat(val) / poolRatio).toFixed(6));
-    }
-  };
-
-  // Once pool ratio loads, sync default CLAWD amount to match default WETH amount
-  useEffect(() => {
-    if (poolRatio && wethAmount && !isNaN(parseFloat(wethAmount))) {
-      setClawdAmount(Math.round(parseFloat(wethAmount) * poolRatio).toString());
-    }
-    // Only run once when ratio first becomes available
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poolRatio !== null]);
 
   /* ── LP Section state & hooks ── */
   const clawdPerWeth: number = poolRatio ?? 0;
@@ -552,130 +491,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* LockUp Section */}
-        {!isLocked && isOwner && vestingAddress && !isWrongNetwork && (
-          <div className="bg-base-200 rounded-xl p-6 mt-6">
-            <h2 className="text-xl font-bold mb-4">🔒 Lock Up Liquidity</h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="label">
-                  <span className="label-text">WETH Amount</span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered w-full"
-                  value={wethAmount}
-                  onChange={e => handleWethChange(e.target.value)}
-                />
-                {ethPrice && wethAmount && (
-                  <p className="text-xs opacity-50 mt-1">
-                    ≈ ${(parseFloat(wethAmount || "0") * ethPrice).toFixed(2)} USD
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="label">
-                  <span className="label-text">CLAWD Amount</span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered w-full"
-                  value={clawdAmount}
-                  onChange={e => handleClawdChange(e.target.value)}
-                />
-                {clawdUsdPrice > 0 && clawdAmount && (
-                  <p className="text-xs opacity-50 mt-1">
-                    ≈ ${(parseFloat(clawdAmount || "0") * clawdUsdPrice).toFixed(4)} USD
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="label">
-                  <span className="label-text">Vest Duration (days)</span>
-                </label>
-                <select
-                  className="select select-bordered w-full"
-                  value={vestDays}
-                  onChange={e => setVestDays(Number(e.target.value))}
-                >
-                  <option value={0.00347}>5 min (test)</option>
-                  <option value={1}>1 day</option>
-                  <option value={7}>7 days</option>
-                  <option value={30}>30 days</option>
-                  <option value={90}>90 days</option>
-                  <option value={365}>365 days</option>
-                </select>
-              </div>
-
-              {/* Three-button flow */}
-              {!wethApproved && (
-                <button
-                  className="btn btn-primary w-full"
-                  disabled={wethApprovePending}
-                  onClick={async () => {
-                    await writeTx(() =>
-                      writeAndOpen(() =>
-                        writeWethAsync({
-                          address: WETH_ADDRESS,
-                          abi: WETH_ABI,
-                          functionName: "approve",
-                          args: [vestingAddress, wethNeeded],
-                        }),
-                      ),
-                    );
-                    setTimeout(() => refetchWethAllowance(), 2000);
-                  }}
-                >
-                  {wethApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
-                  {wethApprovePending ? "Approving WETH..." : `1️⃣ Approve ${wethAmount} WETH`}
-                </button>
-              )}
-
-              {wethApproved && !clawdApproved && (
-                <button
-                  className="btn btn-primary w-full"
-                  disabled={clawdApprovePending}
-                  onClick={async () => {
-                    await writeTx(() =>
-                      writeAndOpen(() =>
-                        writeClawdAsync({
-                          address: CLAWD_ADDRESS,
-                          abi: CLAWD_ABI,
-                          functionName: "approve",
-                          args: [vestingAddress, clawdNeeded],
-                        }),
-                      ),
-                    );
-                    setTimeout(() => refetchClawdAllowance(), 2000);
-                  }}
-                >
-                  {clawdApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
-                  {clawdApprovePending ? "Approving CLAWD..." : `2️⃣ Approve ${clawdAmount} CLAWD`}
-                </button>
-              )}
-
-              {wethApproved && clawdApproved && (
-                <button
-                  className="btn btn-accent w-full"
-                  disabled={lockUpMining}
-                  onClick={async () => {
-                    await writeAndOpen(() =>
-                      writeLockUp({
-                        functionName: "lockUp",
-                        args: [wethNeeded, clawdNeeded, BigInt(Math.floor(vestDays * 86400)), BigInt(0), BigInt(0)],
-                      }),
-                    );
-                  }}
-                >
-                  {lockUpMining && <span className="loading loading-spinner loading-sm mr-2" />}
-                  {lockUpMining ? "Locking..." : "3️⃣ Lock Up Liquidity"}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Connect CTA — shown when not connected */}
         {!connectedAddress && (
           <div className="bg-base-200 rounded-xl p-6 mt-6 text-center">
@@ -751,7 +566,7 @@ export default function Home() {
           </div>
         )}
         {/* LP Section */}
-        {connectedAddress && !isWrongNetwork && (
+        {isOwner && connectedAddress && !isWrongNetwork && (
           <div className="bg-base-200 rounded-xl p-6 mt-6">
             <h2 className="text-xl font-bold mb-4">💧 Add Liquidity to Pool</h2>
 
