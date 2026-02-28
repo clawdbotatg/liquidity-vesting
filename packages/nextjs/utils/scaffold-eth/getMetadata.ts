@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 
-const baseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  : process.env.NEXT_PUBLIC_APP_URL
-    ? process.env.NEXT_PUBLIC_APP_URL
-    : `http://localhost:${process.env.PORT || 3000}`;
+const baseUrl =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null) ||
+  "https://bafybeigxnfhyvomwdu7xeu3cgs7uj7tbslb6pct72cejrdoqbkaeg7chim.ipfs.community.bgipfs.com";
 const titleTemplate = "%s | Liquidity Vesting";
 
 export const getMetadata = ({

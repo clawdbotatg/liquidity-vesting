@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
 import { formatEther, parseEther } from "viem";
@@ -19,11 +19,13 @@ const WETH_ADDRESS = externalContracts[8453].WETH.address;
 const CLAWD_ADDRESS = externalContracts[8453].CLAWD.address;
 
 export default function Home() {
-  const { address: connectedAddress, chain } = useAccount();
+  const { address: connectedAddress, chain, connector } = useAccount();
   const { switchChain } = useSwitchChain();
   const [wethAmount, setWethAmount] = useState("0.001");
   const [clawdAmount, setClawdAmount] = useState("100000");
   const [vestDays, setVestDays] = useState(30);
+  const [wethApprovePending, setWethApprovePending] = useState(false);
+  const [clawdApprovePending, setClawdApprovePending] = useState(false);
 
   const { price: ethPrice } = useFetchNativeCurrencyPrice();
   const writeTx = useTransactor();
@@ -104,9 +106,9 @@ export default function Home() {
     query: { enabled: !!connectedAddress && !!vestingAddress },
   });
 
-  // Write hooks - approvals use useTransactor for toast notifications
-  const { writeContractAsync: writeWethAsync, isPending: wethApprovePending } = useWriteContract();
-  const { writeContractAsync: writeClawdAsync, isPending: clawdApprovePending } = useWriteContract();
+  // Write hooks
+  const { writeContractAsync: writeWethAsync } = useWriteContract();
+  const { writeContractAsync: writeClawdAsync } = useWriteContract();
   const { writeContractAsync: writeLockUp, isMining: lockUpMining } = useScaffoldWriteContract({
     contractName: "LiquidityVesting",
   });
@@ -120,6 +122,55 @@ export default function Home() {
     contractName: "LiquidityVesting",
   });
 
+  // Mobile deep linking
+  const openWallet = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (!isMobile || window.ethereum) return;
+
+    const allIds = [
+      connector?.id,
+      connector?.name,
+      typeof localStorage !== "undefined" ? localStorage.getItem("wagmi.recentConnectorId") : null,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    let wcWallet = "";
+    try {
+      if (typeof localStorage !== "undefined") {
+        const wcKey = Object.keys(localStorage).find(k => k.startsWith("wc@2:client"));
+        if (wcKey) wcWallet = (localStorage.getItem(wcKey) || "").toLowerCase();
+      }
+    } catch {}
+    const search = `${allIds} ${wcWallet}`;
+
+    const schemes: [string[], string][] = [
+      [["rainbow"], "rainbow://"],
+      [["metamask"], "metamask://"],
+      [["coinbase", "cbwallet"], "cbwallet://"],
+      [["trust"], "trust://"],
+      [["phantom"], "phantom://"],
+    ];
+
+    for (const [keywords, scheme] of schemes) {
+      if (keywords.some(k => search.includes(k))) {
+        window.location.href = scheme;
+        return;
+      }
+    }
+  }, [connector]);
+
+  const writeAndOpen = useCallback(
+    <T,>(writeFn: () => Promise<T>): Promise<T> => {
+      const promise = writeFn();
+      setTimeout(openWallet, 2000);
+      return promise;
+    },
+    [openWallet],
+  );
+
   const wethNeeded = parseEther(wethAmount || "0");
   const clawdNeeded = parseEther(clawdAmount || "0");
   const wethApproved = wethAllowance !== undefined && (wethAllowance as bigint) >= wethNeeded;
@@ -129,12 +180,8 @@ export default function Home() {
 
   const vestedLiq = vestedLiquidityData ? BigInt(vestedLiquidityData.toString()) : 0n;
   const initialLiq = initialLiquidityData ? BigInt(initialLiquidityData.toString()) : 0n;
-  // Already withdrawn: % of initial that's been taken out
   const alreadyWithdrawnPct = initialLiq > 0n ? Number((vestedLiq * 10000n) / initialLiq) / 100 : 0;
-
-  // Available now: total vested so far minus what's already been withdrawn
   const availableNowPct = Math.max(0, vestedPercentNum - alreadyWithdrawnPct);
-
   const totalVestedPct = alreadyWithdrawnPct + availableNowPct;
 
   const isWrongNetwork = connectedAddress && chain?.id !== 8453;
@@ -180,7 +227,6 @@ export default function Home() {
     return `($${val.toFixed(2)})`;
   };
 
-  // Format WETH amounts without scientific notation, stripping trailing zeros
   const fmtWETH = (wei: bigint): string => Number(formatEther(wei)).toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
 
   const wethBalanceFormatted = wethBalance !== undefined ? Number(formatEther(wethBalance as bigint)).toFixed(6) : null;
@@ -188,19 +234,21 @@ export default function Home() {
   const wethUsd =
     wethBalanceFormatted && ethPrice ? `($${(parseFloat(wethBalanceFormatted) * ethPrice).toFixed(2)})` : "";
 
+  // Fix 1: When not connected, show ONLY the connect button
+  if (!connectedAddress) {
+    return (
+      <div className="flex items-center justify-center flex-grow pt-10">
+        <RainbowKitCustomConnectButton />
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center flex-col flex-grow pt-10">
       <div className="px-5 w-full max-w-2xl">
-        <h1 className="text-center">
-          <span className="block text-4xl font-bold mb-2">🦞 Liquidity Vesting</span>
-          <span className="block text-sm opacity-70">WETH / CLAWD · Uniswap V3 · Base</span>
-        </h1>
-
-        {connectedAddress && (
-          <div className="flex justify-center mt-2 opacity-50 text-sm">
-            <span className="mr-1">Connected:</span> <Address address={connectedAddress} />
-          </div>
-        )}
+        <div className="flex justify-center mt-2 opacity-50 text-sm">
+          <span className="mr-1">Connected:</span> <Address address={connectedAddress} />
+        </div>
 
         {/* Status Panel */}
         <div className="bg-base-200 rounded-xl p-6 mt-8">
@@ -241,7 +289,6 @@ export default function Home() {
 
           {isLocked && (
             <div className="mt-4">
-              {/* Stacked vesting progress bar */}
               <div className="flex justify-between text-sm mb-1">
                 <span className="font-medium">Vested</span>
                 <span className="text-base-content/70">{totalVestedPct.toFixed(2)}% total</span>
@@ -292,6 +339,11 @@ export default function Home() {
                   value={wethAmount}
                   onChange={e => setWethAmount(e.target.value)}
                 />
+                {ethPrice && wethAmount && (
+                  <p className="text-xs opacity-50 mt-1">
+                    ≈ ${(parseFloat(wethAmount || "0") * ethPrice).toFixed(2)} USD
+                  </p>
+                )}
               </div>
               <div>
                 <label className="label">
@@ -303,6 +355,11 @@ export default function Home() {
                   value={clawdAmount}
                   onChange={e => setClawdAmount(e.target.value)}
                 />
+                {clawdUsdPrice > 0 && clawdAmount && (
+                  <p className="text-xs opacity-50 mt-1">
+                    ≈ ${(parseFloat(clawdAmount || "0") * clawdUsdPrice).toFixed(4)} USD
+                  </p>
+                )}
               </div>
               <div>
                 <label className="label">
@@ -328,15 +385,22 @@ export default function Home() {
                   className="btn btn-primary w-full"
                   disabled={wethApprovePending}
                   onClick={async () => {
-                    await writeTx(() =>
-                      writeWethAsync({
-                        address: WETH_ADDRESS,
-                        abi: WETH_ABI,
-                        functionName: "approve",
-                        args: [vestingAddress, wethNeeded],
-                      }),
-                    );
-                    setTimeout(() => refetchWethAllowance(), 2000);
+                    setWethApprovePending(true);
+                    try {
+                      await writeTx(() =>
+                        writeAndOpen(() =>
+                          writeWethAsync({
+                            address: WETH_ADDRESS,
+                            abi: WETH_ABI,
+                            functionName: "approve",
+                            args: [vestingAddress, wethNeeded],
+                          }),
+                        ),
+                      );
+                      setTimeout(() => refetchWethAllowance(), 2000);
+                    } finally {
+                      setWethApprovePending(false);
+                    }
                   }}
                 >
                   {wethApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
@@ -349,15 +413,22 @@ export default function Home() {
                   className="btn btn-primary w-full"
                   disabled={clawdApprovePending}
                   onClick={async () => {
-                    await writeTx(() =>
-                      writeClawdAsync({
-                        address: CLAWD_ADDRESS,
-                        abi: CLAWD_ABI,
-                        functionName: "approve",
-                        args: [vestingAddress, clawdNeeded],
-                      }),
-                    );
-                    setTimeout(() => refetchClawdAllowance(), 2000);
+                    setClawdApprovePending(true);
+                    try {
+                      await writeTx(() =>
+                        writeAndOpen(() =>
+                          writeClawdAsync({
+                            address: CLAWD_ADDRESS,
+                            abi: CLAWD_ABI,
+                            functionName: "approve",
+                            args: [vestingAddress, clawdNeeded],
+                          }),
+                        ),
+                      );
+                      setTimeout(() => refetchClawdAllowance(), 2000);
+                    } finally {
+                      setClawdApprovePending(false);
+                    }
                   }}
                 >
                   {clawdApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
@@ -370,10 +441,12 @@ export default function Home() {
                   className="btn btn-accent w-full"
                   disabled={lockUpMining}
                   onClick={async () => {
-                    await writeLockUp({
-                      functionName: "lockUp",
-                      args: [wethNeeded, clawdNeeded, BigInt(Math.floor(vestDays * 86400)), BigInt(0), BigInt(0)],
-                    });
+                    await writeAndOpen(() =>
+                      writeLockUp({
+                        functionName: "lockUp",
+                        args: [wethNeeded, clawdNeeded, BigInt(Math.floor(vestDays * 86400)), BigInt(0), BigInt(0)],
+                      }),
+                    );
                   }}
                 >
                   {lockUpMining && <span className="loading loading-spinner loading-sm mr-2" />}
@@ -392,7 +465,7 @@ export default function Home() {
               <button
                 className="btn btn-primary w-full"
                 disabled={claimMining}
-                onClick={() => writeClaim({ functionName: "claim" })}
+                onClick={() => writeAndOpen(() => writeClaim({ functionName: "claim" }))}
               >
                 {claimMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {claimMining ? "Claiming..." : "💰 Claim Fees"}
@@ -407,7 +480,7 @@ export default function Home() {
               <button
                 className="btn btn-secondary w-full"
                 disabled={vestMining}
-                onClick={() => writeVest({ functionName: "vest", args: [BigInt(0), BigInt(0)] })}
+                onClick={() => writeAndOpen(() => writeVest({ functionName: "vest", args: [BigInt(0), BigInt(0)] }))}
               >
                 {vestMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {vestMining ? "Vesting..." : "📤 Vest"}
@@ -422,7 +495,9 @@ export default function Home() {
               <button
                 className="btn btn-accent w-full"
                 disabled={claimAndVestMining}
-                onClick={() => writeClaimAndVest({ functionName: "claimAndVest", args: [BigInt(0), BigInt(0)] })}
+                onClick={() =>
+                  writeAndOpen(() => writeClaimAndVest({ functionName: "claimAndVest", args: [BigInt(0), BigInt(0)] }))
+                }
               >
                 {claimAndVestMining && <span className="loading loading-spinner loading-sm mr-2" />}
                 {claimAndVestMining ? "Processing..." : "🔄 Claim & Vest"}
@@ -436,12 +511,6 @@ export default function Home() {
                 </p>
               )}
             </div>
-          </div>
-        )}
-
-        {!connectedAddress && (
-          <div className="text-center mt-8">
-            <RainbowKitCustomConnectButton />
           </div>
         )}
       </div>
