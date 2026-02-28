@@ -270,21 +270,18 @@ export default function Home() {
     abi: SLOT0_ABI,
     functionName: "slot0",
   });
-  const { data: poolWethBal } = useReadContract({
-    address: WETH_ADDRESS,
-    abi: WETH_ABI,
-    functionName: "balanceOf",
-    args: [POOL_ADDRESS],
-  });
-  const { data: poolClawdBal } = useReadContract({
-    address: CLAWD_ADDRESS,
-    abi: CLAWD_ABI,
-    functionName: "balanceOf",
-    args: [POOL_ADDRESS],
-  });
+  // Use sqrtPriceX96 for spot CLAWD price — pool balanceOf() ratios are NOT spot price
+  // (pool holds liquidity across all ticks, not just the current tick)
   const clawdUsdPrice =
-    poolWethBal && poolClawdBal && ethPrice && Number(poolClawdBal) > 0
-      ? (Number(formatEther(poolWethBal as bigint)) / Number(formatEther(poolClawdBal as bigint))) * ethPrice
+    slot0Data && ethPrice
+      ? (() => {
+          const sqrtPriceX96 = slot0Data[0] as bigint;
+          const Q96 = 2n ** 96n;
+          const SCALE = 10n ** 18n;
+          const ratioScaled = (sqrtPriceX96 * sqrtPriceX96 * SCALE) / (Q96 * Q96);
+          const clawdPerWeth = Number(ratioScaled) / 1e18;
+          return clawdPerWeth > 0 ? ethPrice / clawdPerWeth : 0;
+        })()
       : 0;
 
   // Compute locked token amounts from position liquidity + current price
