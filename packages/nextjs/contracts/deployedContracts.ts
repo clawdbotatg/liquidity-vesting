@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   8453: {
     LiquidityVesting: {
-      address: "0x833c26C61016e36ECB7f4F3f7De08e4f802042DE",
+      address: "0x8cf3261a51eb6eb437d6db1369c3cf0b3514669c",
       abi: [
         {
           type: "constructor",
@@ -262,7 +262,7 @@ const deployedContracts = {
           name: "renounceOwnership",
           inputs: [],
           outputs: [],
-          stateMutability: "nonpayable",
+          stateMutability: "pure",
         },
         {
           type: "function",
@@ -520,7 +520,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 42717541,
+      deployedOnBlock: 42758999,
     },
   },
   31337: {
@@ -780,7 +780,7 @@ const deployedContracts = {
           name: "renounceOwnership",
           inputs: [],
           outputs: [],
-          stateMutability: "nonpayable",
+          stateMutability: "pure",
         },
         {
           type: "function",

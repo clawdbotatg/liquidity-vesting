@@ -10,7 +10,11 @@ contract DeployLiquidityVesting is ScaffoldETHDeploy {
     address constant CLAWD = 0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07;
     uint24 constant FEE = 10000;
 
+    // safe.clawd.atg.eth — multisig owner after deploy
+    address constant SAFE = 0x90eF2A9211A3E7CE788561E5af54C76B0Fa3aEd0;
+
     function run() external ScaffoldEthDeployerRunner {
-        new LiquidityVesting(POSITION_MANAGER, WETH, CLAWD, FEE);
+        LiquidityVesting vesting = new LiquidityVesting(POSITION_MANAGER, WETH, CLAWD, FEE);
+        vesting.transferOwnership(SAFE);
     }
 }
