@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
 import { formatEther, parseEther } from "viem";
-import { useAccount, useSimulateContract, useWriteContract } from "wagmi";
+import { base } from "viem/chains";
+import { useAccount, useSimulateContract, useSwitchChain, useWriteContract } from "wagmi";
 import { useReadContract } from "wagmi";
 import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import externalContracts from "~~/contracts/externalContracts";
@@ -19,6 +20,7 @@ const CLAWD_ADDRESS = externalContracts[8453].CLAWD.address;
 
 export default function Home() {
   const { address: connectedAddress, chain } = useAccount();
+  const { switchChain } = useSwitchChain();
   const [wethAmount, setWethAmount] = useState("0.001");
   const [clawdAmount, setClawdAmount] = useState("100000");
   const [vestDays, setVestDays] = useState(30);
@@ -267,8 +269,10 @@ export default function Home() {
         {/* Wrong network warning */}
         {isWrongNetwork && (
           <div className="bg-warning/20 border border-warning rounded-xl p-6 mt-6 text-center">
-            <p className="font-bold text-lg">⚠️ Wrong Network</p>
-            <p className="text-sm opacity-70 mt-2">Please switch to Base to interact with this contract.</p>
+            <p className="font-bold text-lg mb-3">⚠️ Wrong Network</p>
+            <button className="btn btn-warning btn-sm" onClick={() => switchChain({ chainId: base.id })}>
+              Switch to Base
+            </button>
           </div>
         )}
 
