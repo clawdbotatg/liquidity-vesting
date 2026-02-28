@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
-import { formatEther, parseEther } from "viem";
+import { formatEther, parseEther, parseUnits } from "viem";
 import { base } from "viem/chains";
 import { useAccount, useSimulateContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { useReadContract } from "wagmi";
@@ -18,6 +18,48 @@ const WETH_ABI = externalContracts[8453].WETH.abi;
 const CLAWD_ABI = externalContracts[8453].CLAWD.abi;
 const WETH_ADDRESS = externalContracts[8453].WETH.address;
 const CLAWD_ADDRESS = externalContracts[8453].CLAWD.address;
+
+/* ── LP helpers ── */
+const TICK_SPACING = 200;
+const TRACK_HALF_STEPS = 200;
+const NPM_ADDRESS = "0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1";
+
+function tickToPrice(tick: number): number {
+  return Math.pow(1.0001, tick);
+}
+
+function sqrtPriceFromTick(tick: number): number {
+  return Math.sqrt(Math.pow(1.0001, tick));
+}
+
+function wethToClawd(w: number, sqrtPriceCurrent: number, spL: number, spU: number): number {
+  if (sqrtPriceCurrent <= spL) return 0;
+  const sp = Math.min(sqrtPriceCurrent, spU);
+  const L = (w * sp * spU) / (spU - sp);
+  return L * (sp - spL);
+}
+
+function clawdToWeth(c: number, sqrtPriceCurrent: number, spL: number, spU: number): number {
+  if (sqrtPriceCurrent >= spU) return 0;
+  const sp = Math.max(sqrtPriceCurrent, spL);
+  const L = c / (sp - spL);
+  return (L * (spU - sp)) / (sp * spU);
+}
+
+function fmtClawdUsd(tick: number, ethPrice: number): string {
+  if (!ethPrice) return "—";
+  const usd = ethPrice / tickToPrice(tick);
+  if (usd >= 1) return `$${usd.toFixed(2)}`;
+  if (usd >= 0.01) return `$${usd.toFixed(4)}`;
+  if (usd >= 0.0001) return `$${usd.toFixed(6)}`;
+  return `$${usd.toFixed(8)}`;
+}
+
+function fmtMultiplier(tick: number, clawdPerWeth: number): string {
+  if (!clawdPerWeth) return "";
+  const ratio = clawdPerWeth / tickToPrice(tick);
+  return `${ratio.toFixed(2)}x`;
+}
 
 export default function Home() {
   const { address: connectedAddress, chain, connector } = useAccount();
@@ -321,6 +363,99 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poolRatio !== null]);
 
+  /* ── LP Section state & hooks ── */
+  const clawdPerWeth: number = poolRatio ?? 0;
+  const sqrtPriceCurrent = slot0Data ? Number(slot0Data[0] as bigint) / 2 ** 96 : 0;
+  const clawdUsdCurrent = clawdPerWeth > 0 && ethPrice ? ethPrice / clawdPerWeth : 0;
+  const lpCurrentTick =
+    clawdPerWeth > 0
+      ? Math.round(Math.floor(Math.log(clawdPerWeth) / Math.log(1.0001)) / TICK_SPACING) * TICK_SPACING
+      : 0;
+
+  const [tickLower, setTickLower] = useState(0);
+  const [tickUpper, setTickUpper] = useState(0);
+  const [lpWethInput, setLpWethInput] = useState("");
+  const [lpClawdInput, setLpClawdInput] = useState("");
+  const [lpLastEdited, setLpLastEdited] = useState<"weth" | "clawd">("weth");
+
+  useEffect(() => {
+    if (lpCurrentTick !== 0 && tickLower === 0 && tickUpper === 0) {
+      setTickLower(lpCurrentTick - 50 * TICK_SPACING);
+      setTickUpper(lpCurrentTick + 50 * TICK_SPACING);
+    }
+  }, [lpCurrentTick, tickLower, tickUpper]);
+
+  const trackMin = lpCurrentTick - TRACK_HALF_STEPS * TICK_SPACING;
+  const trackMax = lpCurrentTick + TRACK_HALF_STEPS * TICK_SPACING;
+  const tickToPct = (tick: number) =>
+    Math.max(0, Math.min(100, 100 - ((tick - trackMin) / (trackMax - trackMin)) * 100));
+  const pctToTick = (pct: number) => {
+    const raw = trackMin + ((100 - pct) / 100) * (trackMax - trackMin);
+    return Math.round(raw / TICK_SPACING) * TICK_SPACING;
+  };
+  const leftPct = tickToPct(tickUpper);
+  const rightPct = tickToPct(tickLower);
+  const currentPct = tickToPct(lpCurrentTick);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const getPct = useCallback((e: React.PointerEvent) => {
+    const rect = trackRef.current!.getBoundingClientRect();
+    return Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+  }, []);
+
+  const lpRecalc = useCallback(
+    (edited: "weth" | "clawd", wVal: string, cVal: string) => {
+      if (!sqrtPriceCurrent) return;
+      const spL = sqrtPriceFromTick(tickLower);
+      const spU = sqrtPriceFromTick(tickUpper);
+      if (edited === "weth" && wVal) {
+        const w = parseFloat(wVal);
+        if (!isNaN(w) && w > 0) {
+          const c = wethToClawd(w, sqrtPriceCurrent, spL, spU);
+          setLpClawdInput(c > 0 ? c.toFixed(2) : "0");
+        }
+      } else if (edited === "clawd" && cVal) {
+        const c = parseFloat(cVal);
+        if (!isNaN(c) && c > 0) {
+          const w = clawdToWeth(c, sqrtPriceCurrent, spL, spU);
+          setLpWethInput(w > 0 ? w.toFixed(8) : "0");
+        }
+      }
+    },
+    [sqrtPriceCurrent, tickLower, tickUpper],
+  );
+
+  useEffect(() => {
+    lpRecalc(lpLastEdited, lpWethInput, lpClawdInput);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickLower, tickUpper]);
+
+  const { data: lpWethAllowance } = useScaffoldReadContract({
+    contractName: "WETH",
+    functionName: "allowance",
+    args: [connectedAddress, NPM_ADDRESS],
+  });
+  const { data: lpClawdAllowance } = useScaffoldReadContract({
+    contractName: "CLAWD",
+    functionName: "allowance",
+    args: [connectedAddress, NPM_ADDRESS],
+  });
+  const { writeContractAsync: lpWriteWeth, isMining: lpWethMining } = useScaffoldWriteContract({
+    contractName: "WETH",
+  });
+  const { writeContractAsync: lpWriteClawd, isMining: lpClawdMining } = useScaffoldWriteContract({
+    contractName: "CLAWD",
+  });
+  const { writeContractAsync: writeNPM, isMining: npmMining } = useScaffoldWriteContract({
+    contractName: "NonfungiblePositionManager",
+  });
+
+  const lpWethAmountBn = lpWethInput ? parseUnits(lpWethInput, 18) : 0n;
+  const lpClawdAmountBn = lpClawdInput ? parseUnits(lpClawdInput, 18) : 0n;
+  const needLpWethApproval =
+    lpWethAllowance !== undefined && lpWethAmountBn > 0n && (lpWethAllowance as bigint) < lpWethAmountBn;
+  const needLpClawdApproval =
+    lpClawdAllowance !== undefined && lpClawdAmountBn > 0n && (lpClawdAllowance as bigint) < lpClawdAmountBn;
+
   const usd = (amount: bigint | undefined, pricePerToken: number): string => {
     if (!amount || !pricePerToken) return "";
     const val = Number(formatEther(amount)) * pricePerToken;
@@ -615,6 +750,187 @@ export default function Home() {
             </div>
           </div>
         )}
+        {/* LP Section */}
+        {connectedAddress && !isWrongNetwork && (
+          <div className="bg-base-200 rounded-xl p-6 mt-6">
+            <h2 className="text-xl font-bold mb-4">💧 Add Liquidity to Pool</h2>
+
+            {/* Current Price */}
+            <div className="text-center mb-8">
+              <div className="text-xs opacity-50 mb-1">Current CLAWD Price</div>
+              <div className="text-2xl font-bold">
+                {clawdUsdCurrent > 0 ? fmtClawdUsd(lpCurrentTick, ethPrice ?? 0) : "..."}
+              </div>
+            </div>
+
+            {/* Dual-handle track */}
+            <div className="px-4 mb-12">
+              <div ref={trackRef} className="relative h-8 flex items-center select-none">
+                <div className="absolute left-0 right-0 h-2 bg-base-300 rounded-full" />
+                <div
+                  className="absolute h-2 rounded-l-full"
+                  style={{ left: `${leftPct}%`, width: `${currentPct - leftPct}%`, backgroundColor: "#fb923c" }}
+                />
+                <div
+                  className="absolute h-2 rounded-r-full"
+                  style={{ left: `${currentPct}%`, width: `${rightPct - currentPct}%`, backgroundColor: "#fb923c" }}
+                />
+                <div
+                  className="absolute -translate-x-1/2 pointer-events-none flex flex-col items-center"
+                  style={{ left: `${currentPct}%` }}
+                >
+                  <div className="text-xs opacity-50 mb-1 whitespace-nowrap" style={{ marginTop: "-20px" }}>
+                    now
+                  </div>
+                  <div className="w-0.5 h-6 bg-warning" />
+                </div>
+                <div
+                  className="absolute -translate-x-1/2 w-5 h-5 bg-base-100 border-2 border-warning rounded-full cursor-grab active:cursor-grabbing shadow-md z-10 touch-none"
+                  style={{ left: `${leftPct}%` }}
+                  onPointerDown={e => e.currentTarget.setPointerCapture(e.pointerId)}
+                  onPointerMove={e => {
+                    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                    const tick = pctToTick(getPct(e));
+                    if (tick > tickLower) setTickUpper(tick);
+                  }}
+                >
+                  <div className="absolute top-7 left-1/2 -translate-x-1/2 bg-base-300 rounded px-2 py-1 text-xs font-bold whitespace-nowrap shadow flex flex-col items-center gap-0.5 pointer-events-none">
+                    <span>{fmtClawdUsd(tickUpper, ethPrice ?? 0)}</span>
+                    <span className="opacity-60 font-normal">{fmtMultiplier(tickUpper, clawdPerWeth)}</span>
+                  </div>
+                </div>
+                <div
+                  className="absolute -translate-x-1/2 w-5 h-5 bg-base-100 border-2 border-warning rounded-full cursor-grab active:cursor-grabbing shadow-md z-10 touch-none"
+                  style={{ left: `${rightPct}%` }}
+                  onPointerDown={e => e.currentTarget.setPointerCapture(e.pointerId)}
+                  onPointerMove={e => {
+                    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                    const tick = pctToTick(getPct(e));
+                    if (tick < tickUpper) setTickLower(tick);
+                  }}
+                >
+                  <div className="absolute top-7 left-1/2 -translate-x-1/2 bg-base-300 rounded px-2 py-1 text-xs font-bold whitespace-nowrap shadow flex flex-col items-center gap-0.5 pointer-events-none">
+                    <span>{fmtClawdUsd(tickLower, ethPrice ?? 0)}</span>
+                    <span className="opacity-60 font-normal">{fmtMultiplier(tickLower, clawdPerWeth)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Range summary */}
+            <div className="flex justify-between text-xs mb-6">
+              <div>
+                <div className="opacity-60">Min price</div>
+                <div className="font-bold">{fmtClawdUsd(tickUpper, ethPrice ?? 0)}</div>
+                <div className="opacity-60">{fmtMultiplier(tickUpper, clawdPerWeth)} of current</div>
+              </div>
+              <div className="text-right">
+                <div className="opacity-60">Max price</div>
+                <div className="font-bold">{fmtClawdUsd(tickLower, ethPrice ?? 0)}</div>
+                <div className="opacity-60">{fmtMultiplier(tickLower, clawdPerWeth)} of current</div>
+              </div>
+            </div>
+
+            {/* Amount Inputs */}
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-sm font-semibold">WETH Amount</label>
+                <input
+                  type="number"
+                  className="input input-bordered w-full"
+                  placeholder="0.0"
+                  value={lpWethInput}
+                  onChange={e => {
+                    setLpWethInput(e.target.value);
+                    setLpLastEdited("weth");
+                    lpRecalc("weth", e.target.value, lpClawdInput);
+                  }}
+                />
+                {lpWethInput && parseFloat(lpWethInput) > 0 && ethPrice && ethPrice > 0 && (
+                  <p className="text-xs opacity-50 mt-1 ml-1">
+                    ≈ ${(parseFloat(lpWethInput) * ethPrice).toFixed(2)} USD
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="text-sm font-semibold">CLAWD Amount</label>
+                <input
+                  type="number"
+                  className="input input-bordered w-full"
+                  placeholder="0.0"
+                  value={lpClawdInput}
+                  onChange={e => {
+                    setLpClawdInput(e.target.value);
+                    setLpLastEdited("clawd");
+                    lpRecalc("clawd", lpWethInput, e.target.value);
+                  }}
+                />
+                {lpClawdInput && parseFloat(lpClawdInput) > 0 && clawdUsdCurrent > 0 && (
+                  <p className="text-xs opacity-50 mt-1 ml-1">
+                    ≈ ${(parseFloat(lpClawdInput) * clawdUsdCurrent).toFixed(2)} USD
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* LP Action Buttons */}
+            <div className="space-y-2">
+              {needLpWethApproval ? (
+                <button
+                  className="btn btn-primary btn-block"
+                  disabled={lpWethMining}
+                  onClick={async () => {
+                    await lpWriteWeth({ functionName: "approve", args: [NPM_ADDRESS, lpWethAmountBn] });
+                  }}
+                >
+                  {lpWethMining && <span className="loading loading-spinner loading-sm mr-2" />}
+                  {lpWethMining ? "Approving..." : "Approve WETH"}
+                </button>
+              ) : needLpClawdApproval ? (
+                <button
+                  className="btn btn-primary btn-block"
+                  disabled={lpClawdMining}
+                  onClick={async () => {
+                    await lpWriteClawd({ functionName: "approve", args: [NPM_ADDRESS, lpClawdAmountBn] });
+                  }}
+                >
+                  {lpClawdMining && <span className="loading loading-spinner loading-sm mr-2" />}
+                  {lpClawdMining ? "Approving..." : "Approve CLAWD"}
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary btn-block"
+                  disabled={npmMining || lpWethAmountBn === 0n}
+                  onClick={async () => {
+                    if (!connectedAddress) return;
+                    await writeNPM({
+                      functionName: "mint",
+                      args: [
+                        {
+                          token0: WETH_ADDRESS,
+                          token1: CLAWD_ADDRESS,
+                          fee: 10000,
+                          tickLower,
+                          tickUpper,
+                          amount0Desired: lpWethAmountBn,
+                          amount1Desired: lpClawdAmountBn,
+                          amount0Min: (lpWethAmountBn * 95n) / 100n,
+                          amount1Min: (lpClawdAmountBn * 95n) / 100n,
+                          recipient: connectedAddress,
+                          deadline: BigInt(Math.floor(Date.now() / 1000) + 300),
+                        },
+                      ],
+                    });
+                  }}
+                >
+                  {npmMining && <span className="loading loading-spinner loading-sm mr-2" />}
+                  {npmMining ? "Adding Liquidity..." : "Add Liquidity"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col items-center mt-8 mb-4 text-sm opacity-60">
           <p className="mb-1">Contract</p>
           {vestingAddress && <Address address={vestingAddress} />}
