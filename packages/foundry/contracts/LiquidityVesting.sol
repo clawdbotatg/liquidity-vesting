@@ -110,7 +110,12 @@ contract LiquidityVesting is Ownable {
         emit LockedUp(_tokenId, liquidity, vestDuration);
     }
 
+    function renounceOwnership() public pure override {
+        revert("renounce disabled");
+    }
+
     function claim() public onlyOwner returns (uint256 amount0, uint256 amount1) {
+        require(isLocked, "Not locked");
         (amount0, amount1) = positionManager.collect(INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: owner(),
             amount0Max: type(uint128).max, amount1Max: type(uint128).max
@@ -122,11 +127,13 @@ contract LiquidityVesting is Ownable {
     /// @param amount0Min Minimum token0 from decreaseLiquidity (0 to skip)
     /// @param amount1Min Minimum token1 from decreaseLiquidity (0 to skip)
     function vest(uint256 amount0Min, uint256 amount1Min) public onlyOwner returns (uint256 amount0, uint256 amount1) {
+        require(isLocked, "Not locked");
         return _vest(amount0Min, amount1Min, false);
     }
 
     /// @notice Claim fees and vest in one call, collecting only once
     function claimAndVest(uint256 amount0Min, uint256 amount1Min) external onlyOwner returns (uint256 amount0, uint256 amount1) {
+        require(isLocked, "Not locked");
         return _vest(amount0Min, amount1Min, true);
     }
 
@@ -152,7 +159,11 @@ contract LiquidityVesting is Ownable {
             amount0Max: type(uint128).max, amount1Max: type(uint128).max
         }));
 
-        if (isFinal) positionManager.burn(tokenId);
+        if (isFinal) {
+            positionManager.burn(tokenId);
+            isLocked = false;
+            tokenId = 0;
+        }
 
         if (includeFees) {
             emit Claimed(amount0, amount1);
@@ -163,6 +174,10 @@ contract LiquidityVesting is Ownable {
     /// @notice Sweep stranded ERC-20 tokens (not the position NFT)
     function sweep(address token) external onlyOwner {
         require(token != address(positionManager), "cannot sweep position manager");
+        require(
+            !isLocked || (token != token0 && token != token1),
+            "cannot sweep locked tokens"
+        );
         uint256 balance = IERC20(token).balanceOf(address(this));
         require(balance > 0, "nothing to sweep");
         IERC20(token).safeTransfer(owner(), balance);

@@ -124,7 +124,11 @@ contract LiquidityVestingTest is Test {
     }
 
     function test_sweep() public {
+        // Sweep after unlock (final vest)
         _lockUp();
+        vm.warp(block.timestamp + VEST_DURATION + 1);
+        vesting.vest(0, 0);
+        // Now unlocked, deal and sweep WETH
         deal(WETH, address(vesting), 1 ether);
         uint256 before = IERC20(WETH).balanceOf(owner);
         vesting.sweep(WETH);
@@ -136,5 +140,35 @@ contract LiquidityVestingTest is Test {
         _lockUp();
         vm.expectRevert("cannot sweep position manager");
         vesting.sweep(POSITION_MANAGER);
+    }
+
+    function test_sweep_locked_tokens_reverts() public {
+        _lockUp();
+        deal(WETH, address(vesting), 1 ether);
+        vm.expectRevert("cannot sweep locked tokens");
+        vesting.sweep(WETH);
+    }
+
+    function test_renounceOwnership_disabled() public {
+        vm.expectRevert("renounce disabled");
+        vesting.renounceOwnership();
+    }
+
+    function test_claim_beforeLockup_reverts() public {
+        vm.expectRevert("Not locked");
+        vesting.claim();
+    }
+
+    function test_vest_beforeLockup_reverts() public {
+        vm.expectRevert("Not locked");
+        vesting.vest(0, 0);
+    }
+
+    function test_isLocked_cleared_after_final_vest() public {
+        _lockUp();
+        vm.warp(block.timestamp + VEST_DURATION + 1);
+        vesting.vest(0, 0);
+        assertEq(vesting.isLocked(), false);
+        assertEq(vesting.tokenId(), 0);
     }
 }
