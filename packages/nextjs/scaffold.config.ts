@@ -11,17 +11,19 @@ export type BaseConfig = {
 
 export type ScaffoldConfig = BaseConfig;
 
-export const DEFAULT_ALCHEMY_API_KEY = "cR4WnXePioePZ5fFrnSiR";
+export const DEFAULT_ALCHEMY_API_KEY = "8GVG8WjDs-sGFRr6Rm839";
 
 const scaffoldConfig = {
   targetNetworks: [chains.base],
   pollingInterval: 3000,
   alchemyApiKey: process.env.NEXT_PUBLIC_ALCHEMY_KEY || DEFAULT_ALCHEMY_API_KEY,
   rpcOverrides: {
-    [chains.base.id]: process.env.NEXT_PUBLIC_BASE_RPC || "https://mainnet.base.org",
+    [chains.base.id]:
+      process.env.NEXT_PUBLIC_BASE_RPC ||
+      `https://base-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_KEY || DEFAULT_ALCHEMY_API_KEY}`,
   },
   walletConnectProjectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || "3a8170812b534d0ff9d794f19a901d64",
-  onlyLocalBurnerWallet: false,
+  onlyLocalBurnerWallet: true,
 } as const satisfies ScaffoldConfig;
 
 export default scaffoldConfig;

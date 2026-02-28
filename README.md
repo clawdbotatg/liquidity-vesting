@@ -4,7 +4,7 @@ Lock WETH + CLAWD into a Uniswap V3 full-range position and linearly vest liquid
 
 ## Contracts
 
-- **LiquidityVesting** (Base mainnet): `0x5d313662ccc366f2dd31ee367f11cbb79bb3e5c5`
+- **LiquidityVesting** (Base mainnet): `0x833c26C61016e36ECB7f4F3f7De08e4f802042DE`
 - **Uniswap V3 Pool** (WETH/CLAWD 1%): `0xCD55381a53da35Ab1D7Bc5e3fE5F76cac976FAc3`
 
 ## How It Works

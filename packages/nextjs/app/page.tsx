@@ -5,7 +5,7 @@ import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
 import { formatEther, parseEther } from "viem";
 import { base } from "viem/chains";
-import { useAccount, useSimulateContract, useSwitchChain, useWriteContract } from "wagmi";
+import { useAccount, useSimulateContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { useReadContract } from "wagmi";
 import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import externalContracts from "~~/contracts/externalContracts";
@@ -24,8 +24,6 @@ export default function Home() {
   const [wethAmount, setWethAmount] = useState("0.001");
   const [clawdAmount, setClawdAmount] = useState("100000");
   const [vestDays, setVestDays] = useState(30);
-  const [wethApprovePending, setWethApprovePending] = useState(false);
-  const [clawdApprovePending, setClawdApprovePending] = useState(false);
 
   const { price: ethPrice } = useFetchNativeCurrencyPrice();
   const writeTx = useTransactor();
@@ -107,8 +105,12 @@ export default function Home() {
   });
 
   // Write hooks
-  const { writeContractAsync: writeWethAsync } = useWriteContract();
-  const { writeContractAsync: writeClawdAsync } = useWriteContract();
+  const { writeContractAsync: writeWethAsync, isPending: wethWritePending, data: wethTxHash } = useWriteContract();
+  const { writeContractAsync: writeClawdAsync, isPending: clawdWritePending, data: clawdTxHash } = useWriteContract();
+  const { isLoading: wethTxMining } = useWaitForTransactionReceipt({ hash: wethTxHash });
+  const { isLoading: clawdTxMining } = useWaitForTransactionReceipt({ hash: clawdTxHash });
+  const wethApprovePending = wethWritePending || wethTxMining;
+  const clawdApprovePending = clawdWritePending || clawdTxMining;
   const { writeContractAsync: writeLockUp, isMining: lockUpMining } = useScaffoldWriteContract({
     contractName: "LiquidityVesting",
   });
@@ -528,22 +530,17 @@ export default function Home() {
                   className="btn btn-primary w-full"
                   disabled={wethApprovePending}
                   onClick={async () => {
-                    setWethApprovePending(true);
-                    try {
-                      await writeTx(() =>
-                        writeAndOpen(() =>
-                          writeWethAsync({
-                            address: WETH_ADDRESS,
-                            abi: WETH_ABI,
-                            functionName: "approve",
-                            args: [vestingAddress, wethNeeded],
-                          }),
-                        ),
-                      );
-                      setTimeout(() => refetchWethAllowance(), 2000);
-                    } finally {
-                      setWethApprovePending(false);
-                    }
+                    await writeTx(() =>
+                      writeAndOpen(() =>
+                        writeWethAsync({
+                          address: WETH_ADDRESS,
+                          abi: WETH_ABI,
+                          functionName: "approve",
+                          args: [vestingAddress, wethNeeded],
+                        }),
+                      ),
+                    );
+                    setTimeout(() => refetchWethAllowance(), 2000);
                   }}
                 >
                   {wethApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
@@ -556,22 +553,17 @@ export default function Home() {
                   className="btn btn-primary w-full"
                   disabled={clawdApprovePending}
                   onClick={async () => {
-                    setClawdApprovePending(true);
-                    try {
-                      await writeTx(() =>
-                        writeAndOpen(() =>
-                          writeClawdAsync({
-                            address: CLAWD_ADDRESS,
-                            abi: CLAWD_ABI,
-                            functionName: "approve",
-                            args: [vestingAddress, clawdNeeded],
-                          }),
-                        ),
-                      );
-                      setTimeout(() => refetchClawdAllowance(), 2000);
-                    } finally {
-                      setClawdApprovePending(false);
-                    }
+                    await writeTx(() =>
+                      writeAndOpen(() =>
+                        writeClawdAsync({
+                          address: CLAWD_ADDRESS,
+                          abi: CLAWD_ABI,
+                          functionName: "approve",
+                          args: [vestingAddress, clawdNeeded],
+                        }),
+                      ),
+                    );
+                    setTimeout(() => refetchClawdAllowance(), 2000);
                   }}
                 >
                   {clawdApprovePending && <span className="loading loading-spinner loading-sm mr-2" />}
