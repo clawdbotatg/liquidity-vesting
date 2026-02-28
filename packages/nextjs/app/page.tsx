@@ -5,18 +5,17 @@ import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
 import { formatEther, parseEther } from "viem";
 import { base } from "viem/chains";
-import { useAccount, useSimulateContract, useSwitchChain, useWriteContract } from "wagmi";
+import { useAccount, useSimulateContract, useSwitchChain } from "wagmi";
 import { useReadContract } from "wagmi";
 import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import externalContracts from "~~/contracts/externalContracts";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { useDeployedContractInfo } from "~~/hooks/scaffold-eth";
-import { useTransactor } from "~~/hooks/scaffold-eth";
 
 const WETH_ABI = externalContracts[8453].WETH.abi;
 const CLAWD_ABI = externalContracts[8453].CLAWD.abi;
-const WETH_ADDRESS = externalContracts[8453].WETH.address;
-const CLAWD_ADDRESS = externalContracts[8453].CLAWD.address;
+const WETH_ADDRESS = externalContracts[8453].WETH.address as `0x${string}`;
+const CLAWD_ADDRESS = externalContracts[8453].CLAWD.address as `0x${string}`;
 
 export default function Home() {
   const { address: connectedAddress, chain, connector } = useAccount();
@@ -28,7 +27,6 @@ export default function Home() {
   const [clawdApprovePending, setClawdApprovePending] = useState(false);
 
   const { price: ethPrice } = useFetchNativeCurrencyPrice();
-  const writeTx = useTransactor();
 
   // Get deployed contract address dynamically
   const { data: deployedContractData } = useDeployedContractInfo({ contractName: "LiquidityVesting" });
@@ -106,9 +104,9 @@ export default function Home() {
     query: { enabled: !!connectedAddress && !!vestingAddress },
   });
 
-  // Write hooks
-  const { writeContractAsync: writeWethAsync } = useWriteContract();
-  const { writeContractAsync: writeClawdAsync } = useWriteContract();
+  // Write hooks — use scaffold hooks for block-confirmation waiting
+  const { writeContractAsync: writeWethAsync } = useScaffoldWriteContract({ contractName: "WETH" });
+  const { writeContractAsync: writeClawdAsync } = useScaffoldWriteContract({ contractName: "CLAWD" });
   const { writeContractAsync: writeLockUp, isMining: lockUpMining } = useScaffoldWriteContract({
     contractName: "LiquidityVesting",
   });
@@ -530,15 +528,11 @@ export default function Home() {
                   onClick={async () => {
                     setWethApprovePending(true);
                     try {
-                      await writeTx(() =>
-                        writeAndOpen(() =>
-                          writeWethAsync({
-                            address: WETH_ADDRESS,
-                            abi: WETH_ABI,
-                            functionName: "approve",
-                            args: [vestingAddress, wethNeeded],
-                          }),
-                        ),
+                      await writeAndOpen(() =>
+                        writeWethAsync({
+                          functionName: "approve",
+                          args: [vestingAddress, wethNeeded],
+                        }),
                       );
                       setTimeout(() => refetchWethAllowance(), 2000);
                     } finally {
@@ -558,15 +552,11 @@ export default function Home() {
                   onClick={async () => {
                     setClawdApprovePending(true);
                     try {
-                      await writeTx(() =>
-                        writeAndOpen(() =>
-                          writeClawdAsync({
-                            address: CLAWD_ADDRESS,
-                            abi: CLAWD_ABI,
-                            functionName: "approve",
-                            args: [vestingAddress, clawdNeeded],
-                          }),
-                        ),
+                      await writeAndOpen(() =>
+                        writeClawdAsync({
+                          functionName: "approve",
+                          args: [vestingAddress, clawdNeeded],
+                        }),
                       );
                       setTimeout(() => refetchClawdAllowance(), 2000);
                     } finally {
