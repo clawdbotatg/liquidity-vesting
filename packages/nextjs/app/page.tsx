@@ -583,9 +583,9 @@ export default function Home() {
           </div>
         )}
         {/* LP Section */}
-        {isOwner && connectedAddress && !isWrongNetwork && (
+        {isOwner && !isLocked && connectedAddress && !isWrongNetwork && (
           <div className="bg-base-200 rounded-xl p-6 mt-6">
-            <h2 className="text-xl font-bold mb-4">💧 Add Liquidity to Pool</h2>
+            <h2 className="text-xl font-bold mb-4">🔒 Lock Liquidity</h2>
 
             {/* Current Price */}
             <div className="text-center mb-8">
@@ -715,7 +715,6 @@ export default function Home() {
                 value={vestDays}
                 onChange={e => setVestDays(Number(e.target.value))}
               >
-                <option value={0.00347}>5 min (test)</option>
                 <option value={1}>1 day</option>
                 <option value={7}>7 days</option>
                 <option value={30}>30 days</option>
@@ -745,6 +744,7 @@ export default function Home() {
               {wethVestApproved && !clawdVestApproved && (
                 <button
                   className="btn btn-primary w-full"
+                  disabled={clawdNeeded === 0n}
                   onClick={() =>
                     approveClawdVest({
                       address: CLAWD_ADDRESS,
@@ -760,7 +760,7 @@ export default function Home() {
               {wethVestApproved && clawdVestApproved && (
                 <button
                   className="btn btn-accent w-full"
-                  disabled={lockUpMining}
+                  disabled={lockUpMining || tickLower >= tickUpper || wethNeeded === 0n}
                   onClick={() =>
                     writeLockUp({
                       functionName: "lockUp",
