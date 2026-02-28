@@ -201,8 +201,75 @@ export default function Home() {
   const isOwner =
     connectedAddress && contractOwner && connectedAddress.toLowerCase() === (contractOwner as string).toLowerCase();
 
-  // Pool balances for CLAWD price
+  // Uniswap V3 Position Manager (Base)
+  const POSITION_MANAGER = "0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f5" as const;
+
+  const POSITIONS_ABI = [
+    {
+      name: "positions",
+      type: "function",
+      stateMutability: "view",
+      inputs: [{ name: "tokenId", type: "uint256" }],
+      outputs: [
+        { name: "nonce", type: "uint96" },
+        { name: "operator", type: "address" },
+        { name: "token0", type: "address" },
+        { name: "token1", type: "address" },
+        { name: "fee", type: "uint24" },
+        { name: "tickLower", type: "int24" },
+        { name: "tickUpper", type: "int24" },
+        { name: "liquidity", type: "uint128" },
+        { name: "feeGrowthInside0LastX128", type: "uint256" },
+        { name: "feeGrowthInside1LastX128", type: "uint256" },
+        { name: "tokensOwed0", type: "uint128" },
+        { name: "tokensOwed1", type: "uint128" },
+      ],
+    },
+  ] as const;
+
+  const SLOT0_ABI = [
+    {
+      name: "slot0",
+      type: "function",
+      stateMutability: "view",
+      inputs: [],
+      outputs: [
+        { name: "sqrtPriceX96", type: "uint160" },
+        { name: "tick", type: "int24" },
+        { name: "observationIndex", type: "uint16" },
+        { name: "observationCardinality", type: "uint16" },
+        { name: "observationCardinalityNext", type: "uint16" },
+        { name: "feeProtocol", type: "uint8" },
+        { name: "unlocked", type: "bool" },
+      ],
+    },
+  ] as const;
+
+  // Read tokenId from the vesting contract
+  const { data: positionTokenId } = useScaffoldReadContract({
+    contractName: "LiquidityVesting",
+    functionName: "tokenId",
+    watch: true,
+  });
+
+  // Read live position liquidity from Uniswap NFT manager
+  const { data: positionData } = useReadContract({
+    address: POSITION_MANAGER,
+    abi: POSITIONS_ABI,
+    functionName: "positions",
+    args: [positionTokenId as bigint],
+    query: { enabled: !!positionTokenId && (positionTokenId as bigint) > 0n && !!isLocked },
+  });
+
+  // Read current pool price
   const POOL_ADDRESS = "0xCD55381a53da35Ab1D7Bc5e3fE5F76cac976FAc3" as const;
+
+  const { data: slot0Data } = useReadContract({
+    address: POOL_ADDRESS,
+    abi: SLOT0_ABI,
+    functionName: "slot0",
+    query: { enabled: !!isLocked },
+  });
   const { data: poolWethBal } = useReadContract({
     address: WETH_ADDRESS,
     abi: WETH_ABI,
@@ -219,6 +286,20 @@ export default function Home() {
     poolWethBal && poolClawdBal && ethPrice && Number(poolClawdBal) > 0
       ? (Number(formatEther(poolWethBal as bigint)) / Number(formatEther(poolClawdBal as bigint))) * ethPrice
       : 0;
+
+  // Compute locked token amounts from position liquidity + current price
+  // For full-range: amount0 = liquidity * 2^96 / sqrtPriceX96, amount1 = liquidity * sqrtPriceX96 / 2^96
+  let lockedWeth: bigint | null = null;
+  let lockedClawd: bigint | null = null;
+  if (positionData && slot0Data) {
+    const liquidity = positionData[7] as bigint;
+    const sqrtPriceX96 = slot0Data[0] as bigint;
+    if (liquidity > 0n && sqrtPriceX96 > 0n) {
+      const Q96 = 2n ** 96n;
+      lockedWeth = (liquidity * Q96) / sqrtPriceX96;
+      lockedClawd = (liquidity * sqrtPriceX96) / Q96;
+    }
+  }
 
   // CLAWD per WETH ratio from pool reserves — used to keep lock-up inputs in sync
   const poolRatio =
@@ -290,24 +371,61 @@ export default function Home() {
               <span className="text-sm opacity-60">Time Remaining</span>
               <p className="font-bold">{timeRemaining()}</p>
             </div>
-            <div>
-              <span className="text-sm opacity-60">WETH Balance</span>
-              <p className="font-bold">
-                {wethBalanceFormatted ?? "—"} {wethUsd && <span className="text-xs opacity-50">{wethUsd}</span>}
-              </p>
-            </div>
-            <div>
-              <span className="text-sm opacity-60">CLAWD Balance</span>
-              <p className="font-bold">
-                {clawdBalanceFormatted ? Number(clawdBalanceFormatted).toLocaleString() : "—"}
-                {clawdBalanceFormatted && clawdUsdPrice > 0 && (
-                  <span className="text-sm font-normal opacity-70 ml-1">
-                    (${(parseFloat(clawdBalanceFormatted) * clawdUsdPrice).toFixed(2)})
-                  </span>
-                )}
-              </p>
-            </div>
+            {connectedAddress && (
+              <>
+                <div>
+                  <span className="text-sm opacity-60">Your WETH</span>
+                  <p className="font-bold">
+                    {wethBalanceFormatted ?? "—"} {wethUsd && <span className="text-xs opacity-50">{wethUsd}</span>}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-sm opacity-60">Your CLAWD</span>
+                  <p className="font-bold">
+                    {clawdBalanceFormatted ? Number(clawdBalanceFormatted).toLocaleString() : "—"}
+                    {clawdBalanceFormatted && clawdUsdPrice > 0 && (
+                      <span className="text-sm font-normal opacity-70 ml-1">
+                        (${(parseFloat(clawdBalanceFormatted) * clawdUsdPrice).toFixed(2)})
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
+
+          {/* Locked in Pool */}
+          {isLocked && (
+            <div className="mt-4 pt-4 border-t border-base-300">
+              <p className="text-sm opacity-60 mb-2">🔒 Locked in Pool</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-sm opacity-60">WETH</span>
+                  <p className="font-bold">
+                    {lockedWeth !== null ? fmtWETH(lockedWeth) : "—"}
+                    {lockedWeth !== null && ethPrice ? (
+                      <span className="text-xs opacity-50 ml-1">
+                        (${(Number(formatEther(lockedWeth)) * ethPrice).toFixed(2)})
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-sm opacity-60">CLAWD</span>
+                  <p className="font-bold">
+                    {lockedClawd !== null
+                      ? Number(formatEther(lockedClawd)).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                      : "—"}
+                    {lockedClawd !== null && clawdUsdPrice > 0 ? (
+                      <span className="text-xs opacity-50 ml-1">
+                        (${(Number(formatEther(lockedClawd)) * clawdUsdPrice).toFixed(2)})
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isLocked && (
             <div className="mt-4">
