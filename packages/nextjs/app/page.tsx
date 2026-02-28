@@ -202,7 +202,7 @@ export default function Home() {
     connectedAddress && contractOwner && connectedAddress.toLowerCase() === (contractOwner as string).toLowerCase();
 
   // Uniswap V3 Position Manager (Base)
-  const POSITION_MANAGER = "0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f5" as const;
+  const POSITION_MANAGER = "0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1" as const;
 
   const POSITIONS_ABI = [
     {
