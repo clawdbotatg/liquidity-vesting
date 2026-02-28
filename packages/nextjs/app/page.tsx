@@ -18,6 +18,41 @@ const CLAWD_ADDRESS = externalContracts[8453].CLAWD.address;
 const WETH_ABI = externalContracts[8453].WETH.abi;
 const CLAWD_ABI = externalContracts[8453].CLAWD.abi;
 
+/* ── Form cache (5 min TTL) ── */
+const FORM_CACHE_KEY = "lv_form_v1";
+const FORM_CACHE_TTL = 5 * 60 * 1000;
+
+type FormCache = {
+  tickLower: number;
+  tickUpper: number;
+  lpWethInput: string;
+  lpClawdInput: string;
+  vestDays: number;
+  ts: number;
+};
+
+function loadFormCache(): FormCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(FORM_CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as FormCache;
+    if (Date.now() - data.ts > FORM_CACHE_TTL) {
+      localStorage.removeItem(FORM_CACHE_KEY);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function saveFormCache(v: Omit<FormCache, "ts">) {
+  try {
+    localStorage.setItem(FORM_CACHE_KEY, JSON.stringify({ ...v, ts: Date.now() }));
+  } catch {}
+}
+
 /* ── LP helpers ── */
 const TICK_SPACING = 200;
 const TRACK_HALF_STEPS = 200;
@@ -356,12 +391,12 @@ export default function Home() {
       ? Math.round(Math.floor(Math.log(clawdPerWeth) / Math.log(1.0001)) / TICK_SPACING) * TICK_SPACING
       : 0;
 
-  const [tickLower, setTickLower] = useState(0);
-  const [tickUpper, setTickUpper] = useState(0);
-  const [lpWethInput, setLpWethInput] = useState("");
-  const [lpClawdInput, setLpClawdInput] = useState("");
+  const [tickLower, setTickLower] = useState(() => loadFormCache()?.tickLower ?? 0);
+  const [tickUpper, setTickUpper] = useState(() => loadFormCache()?.tickUpper ?? 0);
+  const [lpWethInput, setLpWethInput] = useState(() => loadFormCache()?.lpWethInput ?? "");
+  const [lpClawdInput, setLpClawdInput] = useState(() => loadFormCache()?.lpClawdInput ?? "");
   const [lpLastEdited, setLpLastEdited] = useState<"weth" | "clawd">("weth");
-  const [vestDays, setVestDays] = useState(30);
+  const [vestDays, setVestDays] = useState(() => loadFormCache()?.vestDays ?? 30);
 
   useEffect(() => {
     if (lpCurrentTick !== 0 && tickLower === 0 && tickUpper === 0) {
@@ -413,6 +448,22 @@ export default function Home() {
     lpRecalc(lpLastEdited, lpWethInput, lpClawdInput);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tickLower, tickUpper]);
+
+  // Auto-save form state to localStorage (5-min TTL)
+  useEffect(() => {
+    if (tickLower !== 0 || tickUpper !== 0 || lpWethInput || lpClawdInput) {
+      saveFormCache({ tickLower, tickUpper, lpWethInput, lpClawdInput, vestDays });
+    }
+  }, [tickLower, tickUpper, lpWethInput, lpClawdInput, vestDays]);
+
+  const resetForm = () => {
+    localStorage.removeItem(FORM_CACHE_KEY);
+    setTickLower(0);
+    setTickUpper(0);
+    setLpWethInput("");
+    setLpClawdInput("");
+    setVestDays(30);
+  };
 
   // NPM hooks removed — owner uses lockUp flow instead
 
@@ -648,7 +699,12 @@ export default function Home() {
         {/* LP Section */}
         {isOwner && !isLocked && connectedAddress && !isWrongNetwork && (
           <div className="bg-base-200 rounded-xl p-6 mt-6">
-            <h2 className="text-xl font-bold mb-4">🔒 Lock Liquidity</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">🔒 Lock Liquidity</h2>
+              <button className="btn btn-ghost btn-xs opacity-50 hover:opacity-100" onClick={resetForm}>
+                ↺ Reset
+              </button>
+            </div>
 
             {/* Current Price */}
             <div className="text-center mb-8">
