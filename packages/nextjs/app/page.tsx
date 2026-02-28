@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
-import { formatEther, parseUnits } from "viem";
+import { formatEther, parseEther } from "viem";
 import { base } from "viem/chains";
-import { useAccount, useSimulateContract, useSwitchChain } from "wagmi";
+import { useAccount, useSimulateContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { useReadContract } from "wagmi";
 import { WalletBalances } from "~~/components/WalletBalances";
 import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
@@ -15,11 +15,12 @@ import { useDeployedContractInfo } from "~~/hooks/scaffold-eth";
 
 const WETH_ADDRESS = externalContracts[8453].WETH.address;
 const CLAWD_ADDRESS = externalContracts[8453].CLAWD.address;
+const WETH_ABI = externalContracts[8453].WETH.abi;
+const CLAWD_ABI = externalContracts[8453].CLAWD.abi;
 
 /* ── LP helpers ── */
 const TICK_SPACING = 200;
 const TRACK_HALF_STEPS = 200;
-const NPM_ADDRESS = "0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1";
 
 function tickToPrice(tick: number): number {
   return Math.pow(1.0001, tick);
@@ -316,6 +317,7 @@ export default function Home() {
   const [lpWethInput, setLpWethInput] = useState("");
   const [lpClawdInput, setLpClawdInput] = useState("");
   const [lpLastEdited, setLpLastEdited] = useState<"weth" | "clawd">("weth");
+  const [vestDays, setVestDays] = useState(30);
 
   useEffect(() => {
     if (lpCurrentTick !== 0 && tickLower === 0 && tickUpper === 0) {
@@ -368,32 +370,47 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tickLower, tickUpper]);
 
-  const { data: lpWethAllowance } = useScaffoldReadContract({
-    contractName: "WETH",
+  // NPM hooks removed — owner uses lockUp flow instead
+
+  // Vesting contract allowance reads
+  const wethNeeded = parseEther(lpWethInput || "0");
+  const clawdNeeded = parseEther(lpClawdInput || "0");
+
+  const { data: wethVestAllowance, refetch: refetchWethVestAllowance } = useReadContract({
+    address: WETH_ADDRESS,
+    abi: WETH_ABI,
     functionName: "allowance",
-    args: [connectedAddress, NPM_ADDRESS],
+    args: [connectedAddress!, vestingAddress!],
+    query: { enabled: !!connectedAddress && !!vestingAddress },
   });
-  const { data: lpClawdAllowance } = useScaffoldReadContract({
-    contractName: "CLAWD",
+  const { data: clawdVestAllowance, refetch: refetchClawdVestAllowance } = useReadContract({
+    address: CLAWD_ADDRESS,
+    abi: CLAWD_ABI,
     functionName: "allowance",
-    args: [connectedAddress, NPM_ADDRESS],
-  });
-  const { writeContractAsync: lpWriteWeth, isMining: lpWethMining } = useScaffoldWriteContract({
-    contractName: "WETH",
-  });
-  const { writeContractAsync: lpWriteClawd, isMining: lpClawdMining } = useScaffoldWriteContract({
-    contractName: "CLAWD",
-  });
-  const { writeContractAsync: writeNPM, isMining: npmMining } = useScaffoldWriteContract({
-    contractName: "NonfungiblePositionManager",
+    args: [connectedAddress!, vestingAddress!],
+    query: { enabled: !!connectedAddress && !!vestingAddress },
   });
 
-  const lpWethAmountBn = lpWethInput ? parseUnits(lpWethInput, 18) : 0n;
-  const lpClawdAmountBn = lpClawdInput ? parseUnits(lpClawdInput, 18) : 0n;
-  const needLpWethApproval =
-    lpWethAllowance !== undefined && lpWethAmountBn > 0n && (lpWethAllowance as bigint) < lpWethAmountBn;
-  const needLpClawdApproval =
-    lpClawdAllowance !== undefined && lpClawdAmountBn > 0n && (lpClawdAllowance as bigint) < lpClawdAmountBn;
+  const wethVestApproved =
+    wethVestAllowance !== undefined && (wethVestAllowance as bigint) >= wethNeeded && wethNeeded > 0n;
+  const clawdVestApproved =
+    clawdVestAllowance !== undefined && (clawdVestAllowance as bigint) >= clawdNeeded && clawdNeeded > 0n;
+
+  const { writeContract: approveWethVest, data: approveWethHash } = useWriteContract();
+  const { isSuccess: wethApproveConfirmed } = useWaitForTransactionReceipt({ hash: approveWethHash });
+  const { writeContract: approveClawdVest, data: approveClawdHash } = useWriteContract();
+  const { isSuccess: clawdApproveConfirmed } = useWaitForTransactionReceipt({ hash: approveClawdHash });
+
+  useEffect(() => {
+    if (wethApproveConfirmed) refetchWethVestAllowance();
+  }, [wethApproveConfirmed, refetchWethVestAllowance]);
+  useEffect(() => {
+    if (clawdApproveConfirmed) refetchClawdVestAllowance();
+  }, [clawdApproveConfirmed, refetchClawdVestAllowance]);
+
+  const { writeContractAsync: writeLockUp, isMining: lockUpMining } = useScaffoldWriteContract({
+    contractName: "LiquidityVesting",
+  });
 
   const usd = (amount: bigint | undefined, pricePerToken: number): string => {
     if (!amount || !pricePerToken) return "";
@@ -688,58 +705,71 @@ export default function Home() {
               </div>
             </div>
 
-            {/* LP Action Buttons */}
+            {/* Vest Duration */}
+            <div className="mb-4">
+              <label className="label">
+                <span className="label-text">Vest Duration</span>
+              </label>
+              <select
+                className="select select-bordered w-full"
+                value={vestDays}
+                onChange={e => setVestDays(Number(e.target.value))}
+              >
+                <option value={0.00347}>5 min (test)</option>
+                <option value={1}>1 day</option>
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+                <option value={365}>365 days</option>
+              </select>
+            </div>
+
+            {/* 3-step lockUp flow */}
             <div className="space-y-2">
-              {needLpWethApproval ? (
+              {!wethVestApproved && (
                 <button
-                  className="btn btn-primary btn-block"
-                  disabled={lpWethMining}
-                  onClick={async () => {
-                    await lpWriteWeth({ functionName: "approve", args: [NPM_ADDRESS, lpWethAmountBn] });
-                  }}
+                  className="btn btn-primary w-full"
+                  disabled={wethNeeded === 0n}
+                  onClick={() =>
+                    approveWethVest({
+                      address: WETH_ADDRESS,
+                      abi: WETH_ABI,
+                      functionName: "approve",
+                      args: [vestingAddress!, wethNeeded],
+                    })
+                  }
                 >
-                  {lpWethMining && <span className="loading loading-spinner loading-sm mr-2" />}
-                  {lpWethMining ? "Approving..." : "Approve WETH"}
+                  1️⃣ Approve WETH
                 </button>
-              ) : needLpClawdApproval ? (
+              )}
+              {wethVestApproved && !clawdVestApproved && (
                 <button
-                  className="btn btn-primary btn-block"
-                  disabled={lpClawdMining}
-                  onClick={async () => {
-                    await lpWriteClawd({ functionName: "approve", args: [NPM_ADDRESS, lpClawdAmountBn] });
-                  }}
+                  className="btn btn-primary w-full"
+                  onClick={() =>
+                    approveClawdVest({
+                      address: CLAWD_ADDRESS,
+                      abi: CLAWD_ABI,
+                      functionName: "approve",
+                      args: [vestingAddress!, clawdNeeded],
+                    })
+                  }
                 >
-                  {lpClawdMining && <span className="loading loading-spinner loading-sm mr-2" />}
-                  {lpClawdMining ? "Approving..." : "Approve CLAWD"}
+                  2️⃣ Approve CLAWD
                 </button>
-              ) : (
+              )}
+              {wethVestApproved && clawdVestApproved && (
                 <button
-                  className="btn btn-primary btn-block"
-                  disabled={npmMining || lpWethAmountBn === 0n}
-                  onClick={async () => {
-                    if (!connectedAddress) return;
-                    await writeNPM({
-                      functionName: "mint",
-                      args: [
-                        {
-                          token0: WETH_ADDRESS,
-                          token1: CLAWD_ADDRESS,
-                          fee: 10000,
-                          tickLower,
-                          tickUpper,
-                          amount0Desired: lpWethAmountBn,
-                          amount1Desired: lpClawdAmountBn,
-                          amount0Min: (lpWethAmountBn * 95n) / 100n,
-                          amount1Min: (lpClawdAmountBn * 95n) / 100n,
-                          recipient: connectedAddress,
-                          deadline: BigInt(Math.floor(Date.now() / 1000) + 300),
-                        },
-                      ],
-                    });
-                  }}
+                  className="btn btn-accent w-full"
+                  disabled={lockUpMining}
+                  onClick={() =>
+                    writeLockUp({
+                      functionName: "lockUp",
+                      args: [wethNeeded, clawdNeeded, BigInt(Math.floor(vestDays * 86400)), 0n, 0n],
+                    })
+                  }
                 >
-                  {npmMining && <span className="loading loading-spinner loading-sm mr-2" />}
-                  {npmMining ? "Adding Liquidity..." : "Add Liquidity"}
+                  {lockUpMining && <span className="loading loading-spinner loading-sm mr-2" />}
+                  {lockUpMining ? "Locking..." : "🔒 Lock into Vesting"}
                 </button>
               )}
             </div>
