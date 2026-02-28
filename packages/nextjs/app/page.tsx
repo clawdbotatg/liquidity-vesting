@@ -7,6 +7,7 @@ import { formatEther, parseEther } from "viem";
 import { base } from "viem/chains";
 import { useAccount, useSimulateContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { useReadContract } from "wagmi";
+import { WalletBalances } from "~~/components/WalletBalances";
 import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import externalContracts from "~~/contracts/externalContracts";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
@@ -70,22 +71,6 @@ export default function Home() {
     contractName: "LiquidityVesting",
     functionName: "previewVest",
     watch: true,
-  });
-
-  // Token balances
-  const { data: wethBalance } = useReadContract({
-    address: WETH_ADDRESS,
-    abi: WETH_ABI,
-    functionName: "balanceOf",
-    args: [connectedAddress!],
-    query: { enabled: !!connectedAddress },
-  });
-  const { data: clawdBalance } = useReadContract({
-    address: CLAWD_ADDRESS,
-    abi: CLAWD_ABI,
-    functionName: "balanceOf",
-    args: [connectedAddress!],
-    query: { enabled: !!connectedAddress },
   });
 
   // Allowances
@@ -271,6 +256,7 @@ export default function Home() {
     address: POOL_ADDRESS,
     abi: SLOT0_ABI,
     functionName: "slot0",
+    query: { refetchInterval: 20_000 },
   });
   // Use sqrtPriceX96 for spot CLAWD price — pool balanceOf() ratios are NOT spot price
   // (pool holds liquidity across all ticks, not just the current tick)
@@ -344,29 +330,13 @@ export default function Home() {
 
   const fmtWETH = (wei: bigint): string => Number(formatEther(wei)).toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
 
-  const wethBalanceFormatted = wethBalance !== undefined ? Number(formatEther(wethBalance as bigint)).toFixed(6) : null;
-  const clawdBalanceFormatted = clawdBalance !== undefined ? formatEther(clawdBalance as bigint) : null;
-  const wethUsd =
-    wethBalanceFormatted && ethPrice ? `($${(parseFloat(wethBalanceFormatted) * ethPrice).toFixed(2)})` : "";
-
   return (
     <div className="flex items-center flex-col flex-grow pt-10">
+      <WalletBalances />
       <div className="px-5 w-full max-w-2xl">
-        {connectedAddress && (
-          <div className="flex justify-center mt-2 opacity-50 text-sm">
-            <span className="mr-1">Connected:</span> <Address address={connectedAddress} />
-          </div>
-        )}
-
         {/* Status Panel */}
         <div className="bg-base-200 rounded-xl p-6 mt-8">
           <h2 className="text-xl font-bold mb-4">📊 Status</h2>
-          {vestingAddress && (
-            <div className="mb-4 text-sm">
-              <span className="opacity-60">Contract: </span>
-              <Address address={vestingAddress} />
-            </div>
-          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className="text-sm opacity-60">Locked</span>
@@ -376,27 +346,6 @@ export default function Home() {
               <span className="text-sm opacity-60">Time Remaining</span>
               <p className="font-bold">{timeRemaining()}</p>
             </div>
-            {connectedAddress && (
-              <>
-                <div>
-                  <span className="text-sm opacity-60">Your WETH</span>
-                  <p className="font-bold">
-                    {wethBalanceFormatted ?? "—"} {wethUsd && <span className="text-xs opacity-50">{wethUsd}</span>}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-sm opacity-60">Your CLAWD</span>
-                  <p className="font-bold">
-                    {clawdBalanceFormatted ? Number(clawdBalanceFormatted).toLocaleString() : "—"}
-                    {clawdBalanceFormatted && clawdUsdPrice > 0 && (
-                      <span className="text-sm font-normal opacity-70 ml-1">
-                        (${(parseFloat(clawdBalanceFormatted) * clawdUsdPrice).toFixed(2)})
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </>
-            )}
           </div>
 
           {/* Locked in Pool */}
@@ -656,6 +605,10 @@ export default function Home() {
             </div>
           </div>
         )}
+        <div className="flex flex-col items-center mt-8 mb-4 text-sm opacity-60">
+          <p className="mb-1">Contract</p>
+          {vestingAddress && <Address address={vestingAddress} />}
+        </div>
       </div>
     </div>
   );

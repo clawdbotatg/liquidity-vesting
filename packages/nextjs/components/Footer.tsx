@@ -35,7 +35,17 @@ export const Footer = () => {
       <div className="w-full">
         <ul className="menu menu-horizontal w-full">
           <div className="flex justify-center items-center gap-2 text-sm w-full">
-            <p className="m-0 text-center">🦞 Liquidity Vesting · Built on Base</p>
+            <p className="m-0 text-center">
+              🦞 Liquidity Vesting · Built on Base ·{" "}
+              <a
+                href="https://github.com/clawdbotatg/liquidity-vesting"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                GitHub
+              </a>
+            </p>
           </div>
         </ul>
       </div>
