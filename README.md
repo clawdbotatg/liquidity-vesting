@@ -1,6 +1,6 @@
 # 🦞 Liquidity Vesting
 
-Lock WETH + CLAWD into a Uniswap V3 full-range position and linearly vest liquidity back to the owner over a configurable duration. While locked, the position earns swap fees.
+Lock WETH + CLAWD into a Uniswap V3 concentrated liquidity position and linearly vest liquidity back to the owner over a configurable duration. While locked, the position earns swap fees.
 
 ## Contracts (Base Mainnet)
 
@@ -30,7 +30,7 @@ Deployed to IPFS via BGIPFS:
 
 ## Key Details
 
-- **Full-range ticks**: tickLower = -887200, tickUpper = 887200
+- **Default full-range ticks**: tickLower = -887200, tickUpper = 887200 (custom range also supported)
 - **Slippage**: 5% on lockUp, vest, and claimAndVest
 - **Security**: renounceOwnership disabled, sweep guards, isLocked guards, state cleared after final vest
 - **Solc**: pinned to 0.8.26 (via-ir optimizer bug in newer versions affects sequential vest math)
