@@ -16,6 +16,8 @@ Lock WETH + CLAWD into a Uniswap V3 full-range position and linearly vest liquid
 Deployed to IPFS via BGIPFS:
 - https://community.bgipfs.com/ipfs/bafybeieheu7qqeedumwthei5dvpvujgpyzfsez2ibg74377zbut4ikundy/
 
+![Lock Liquidity UI](./assets/lock-liquidity-ui.jpg)
+
 ## How It Works
 
 1. Owner approves WETH + CLAWD to the contract
