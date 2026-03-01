@@ -134,7 +134,7 @@ library LiquidityAmounts {
 }
 
 /// @title LiquidityVesting
-/// @notice Locks WETH + CLAWD into a Uniswap V3 full-range position and vests liquidity linearly to owner
+/// @notice Locks WETH + CLAWD into a Uniswap V3 concentrated liquidity position and vests liquidity linearly to owner
 contract LiquidityVesting is Ownable {
     using SafeERC20 for IERC20;
 

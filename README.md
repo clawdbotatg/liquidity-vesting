@@ -21,7 +21,7 @@ Deployed to IPFS via BGIPFS:
 ## How It Works
 
 1. Owner approves WETH + CLAWD to the contract
-2. `lockUp(tickLower, tickUpper, amount0, amount1, vestDuration)` — creates a Uniswap V3 LP position and starts the vest timer
+2. `lockUp(amount0Desired, amount1Desired, vestDuration, tickLower, tickUpper, amount0Min, amount1Min)` — creates a Uniswap V3 LP position at the specified tick range and starts the vest timer
 3. Over `vestDuration` seconds, liquidity linearly unlocks
 4. `vest()` — withdraws vested liquidity back to the owner
 5. `claim()` — collects accumulated trading fees
