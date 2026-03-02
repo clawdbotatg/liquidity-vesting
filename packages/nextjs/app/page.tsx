@@ -564,6 +564,122 @@ export default function Home() {
                   </p>
                 </div>
               </div>
+
+              {/* Price Range Display */}
+              {positionData && (
+                <>
+                  <p className="text-sm opacity-60 mb-2 mt-4">📍 Price Range</p>
+                  {(() => {
+                    const posTickLower = positionData[5] as number;
+                    const posTickUpper = positionData[6] as number;
+                    const isFullRange = posTickLower <= -887200 && posTickUpper >= 887200;
+                    const inRange = lpCurrentTick >= posTickLower && lpCurrentTick <= posTickUpper;
+
+                    const prTrackCenter = (posTickLower + posTickUpper) / 2;
+                    let prHalfRange = Math.max((posTickUpper - posTickLower) * 0.75, TRACK_HALF_STEPS * TICK_SPACING);
+                    // Ensure current tick is visible
+                    const distFromCenter = Math.abs(lpCurrentTick - prTrackCenter);
+                    if (distFromCenter > prHalfRange * 0.9) {
+                      prHalfRange = distFromCenter * 1.2;
+                    }
+                    const prTrackMin = prTrackCenter - prHalfRange;
+                    const prTrackMax = prTrackCenter + prHalfRange;
+                    const prTickToPct = (tick: number) =>
+                      Math.max(0, Math.min(100, 100 - ((tick - prTrackMin) / (prTrackMax - prTrackMin)) * 100));
+
+                    const prLeftPct = prTickToPct(posTickUpper);
+                    const prRightPct = prTickToPct(posTickLower);
+                    const prCurrentPct = prTickToPct(lpCurrentTick);
+
+                    return (
+                      <>
+                        <div className="flex items-center gap-2 mb-3">
+                          {isFullRange && <span className="badge badge-sm badge-outline">↔ Full range</span>}
+                          <span className={`badge badge-sm ${inRange ? "badge-success" : "badge-error"}`}>
+                            {inRange ? "🟢 In range" : "🔴 Out of range"}
+                          </span>
+                        </div>
+
+                        <div className="px-4 mb-8">
+                          <div className="relative h-8 flex items-center select-none pointer-events-none">
+                            <div className="absolute left-0 right-0 h-2 bg-base-300 rounded-full" />
+                            <div
+                              className="absolute h-2 rounded-l-full"
+                              style={{
+                                left: `${prLeftPct}%`,
+                                width: `${Math.max(0, prCurrentPct - prLeftPct)}%`,
+                                backgroundColor: "#fb923c",
+                              }}
+                            />
+                            <div
+                              className="absolute h-2 rounded-r-full"
+                              style={{
+                                left: `${prCurrentPct}%`,
+                                width: `${Math.max(0, prRightPct - prCurrentPct)}%`,
+                                backgroundColor: "#fb923c",
+                              }}
+                            />
+                            {/* Current price marker */}
+                            <div
+                              className="absolute -translate-x-1/2 flex flex-col items-center"
+                              style={{ left: `${prCurrentPct}%` }}
+                            >
+                              <div
+                                className="flex flex-col items-center mb-1 whitespace-nowrap"
+                                style={{ marginTop: "-36px" }}
+                              >
+                                <span className="text-xs font-bold text-warning">
+                                  {fmtClawdUsd(lpCurrentTick, ethPrice ?? 0)}
+                                </span>
+                                <span className="text-xs opacity-50">now</span>
+                              </div>
+                              <div className="w-0.5 h-6 bg-warning" />
+                            </div>
+                            {/* Lower tick dot */}
+                            <div
+                              className="absolute -translate-x-1/2 w-5 h-5 bg-base-100 border-2 border-warning rounded-full shadow-md z-10"
+                              style={{ left: `${prRightPct}%` }}
+                            >
+                              <div className="absolute top-7 left-1/2 -translate-x-1/2 bg-base-300 rounded px-2 py-1 text-xs font-bold whitespace-nowrap shadow flex flex-col items-center gap-0.5">
+                                <span>{fmtClawdUsd(posTickLower, ethPrice ?? 0)}</span>
+                                <span className="opacity-60 font-normal">
+                                  {fmtMultiplier(posTickLower, clawdPerWeth)}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Upper tick dot */}
+                            <div
+                              className="absolute -translate-x-1/2 w-5 h-5 bg-base-100 border-2 border-warning rounded-full shadow-md z-10"
+                              style={{ left: `${prLeftPct}%` }}
+                            >
+                              <div className="absolute top-7 left-1/2 -translate-x-1/2 bg-base-300 rounded px-2 py-1 text-xs font-bold whitespace-nowrap shadow flex flex-col items-center gap-0.5">
+                                <span>{fmtClawdUsd(posTickUpper, ethPrice ?? 0)}</span>
+                                <span className="opacity-60 font-normal">
+                                  {fmtMultiplier(posTickUpper, clawdPerWeth)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Range summary */}
+                        <div className="flex justify-between text-xs">
+                          <div>
+                            <div className="opacity-60">Min price</div>
+                            <div className="font-bold">{fmtClawdUsd(posTickUpper, ethPrice ?? 0)}</div>
+                            <div className="opacity-60">{fmtMultiplier(posTickUpper, clawdPerWeth)} of current</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="opacity-60">Max price</div>
+                            <div className="font-bold">{fmtClawdUsd(posTickLower, ethPrice ?? 0)}</div>
+                            <div className="opacity-60">{fmtMultiplier(posTickLower, clawdPerWeth)} of current</div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </>
+              )}
             </div>
           )}
 
