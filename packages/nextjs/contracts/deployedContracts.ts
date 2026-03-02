@@ -1063,4 +1063,59 @@ const deployedContracts = {
   },
 } as const;
 
+// Factory contract - deployed separately
+export const factoryContracts = {
+  8453: {
+    LiquidityVestingFactory: {
+      address: "0x0000000000000000000000000000000000000000" as const, // TODO: replace with deployed address
+      abi: [
+        {
+          inputs: [{ name: "owner", type: "address" }],
+          name: "deploy",
+          outputs: [{ name: "", type: "address" }],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "getDeployments",
+          outputs: [{ name: "", type: "address[]" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [{ name: "owner", type: "address" }],
+          name: "getDeploymentsByOwner",
+          outputs: [{ name: "", type: "address[]" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "deploymentCount",
+          outputs: [{ name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [{ name: "", type: "uint256" }],
+          name: "allDeployments",
+          outputs: [{ name: "", type: "address" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            { indexed: true, name: "owner", type: "address" },
+            { indexed: true, name: "contractAddress", type: "address" },
+          ],
+          name: "ContractDeployed",
+          type: "event",
+        },
+      ] as const,
+    },
+  },
+};
+
 export default deployedContracts satisfies GenericContractsDeclaration;

@@ -14,7 +14,6 @@ contract DeployLiquidityVesting is ScaffoldETHDeploy {
     address constant SAFE = 0x90eF2A9211A3E7CE788561E5af54C76B0Fa3aEd0;
 
     function run() external ScaffoldEthDeployerRunner {
-        LiquidityVesting vesting = new LiquidityVesting(POSITION_MANAGER, WETH, CLAWD, FEE);
-        vesting.transferOwnership(SAFE);
+        LiquidityVesting vesting = new LiquidityVesting(SAFE, POSITION_MANAGER, WETH, CLAWD, FEE);
     }
 }

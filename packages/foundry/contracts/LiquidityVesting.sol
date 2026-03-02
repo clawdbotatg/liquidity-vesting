@@ -154,8 +154,8 @@ contract LiquidityVesting is Ownable {
     event Vested(uint128 liquidityReleased, uint256 amount0, uint256 amount1);
     event Claimed(uint256 amount0, uint256 amount1);
 
-    constructor(address _positionManager, address _token0, address _token1, uint24 _fee)
-        Ownable(msg.sender) {
+    constructor(address _owner, address _positionManager, address _token0, address _token1, uint24 _fee)
+        Ownable(_owner) {
         positionManager = INonfungiblePositionManager(_positionManager);
         token0 = _token0;
         token1 = _token1;

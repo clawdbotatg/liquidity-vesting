@@ -19,7 +19,7 @@ contract LiquidityVestingTest is Test {
 
     function setUp() public {
         vm.createSelectFork(vm.envString("BASE_RPC_URL"));
-        vesting = new LiquidityVesting(POSITION_MANAGER, WETH, CLAWD, POOL_FEE);
+        vesting = new LiquidityVesting(address(this), POSITION_MANAGER, WETH, CLAWD, POOL_FEE);
         deal(WETH, owner, WETH_AMOUNT * 100);
         deal(CLAWD, owner, CLAWD_AMOUNT * 100);
     }
