@@ -1067,7 +1067,7 @@ const deployedContracts = {
 export const factoryContracts = {
   8453: {
     LiquidityVestingFactory: {
-      address: "0x0000000000000000000000000000000000000000" as const, // TODO: replace with deployed address
+      address: "0xEE3B3c6DF763340356F8783F67d4b64E48b3A018" as const,
       abi: [
         {
           inputs: [{ name: "owner", type: "address" }],
