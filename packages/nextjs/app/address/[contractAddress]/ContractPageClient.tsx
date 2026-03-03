@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { useFetchNativeCurrencyPrice } from "@scaffold-ui/hooks";
 import { formatEther, parseEther } from "viem";
@@ -128,10 +128,7 @@ function getAmountsForLiquidity(
   }
 }
 
-export default function ContractPage({ params: paramsPromise }: { params: Promise<{ contractAddress: string }> }) {
-  const params = use(paramsPromise);
-  const contractAddress = params.contractAddress as `0x${string}`;
-
+export default function ContractPage({ contractAddress }: { contractAddress: `0x${string}` }) {
   const { address: connectedAddress, chain, connector } = useAccount();
   const { switchChain } = useSwitchChain();
 

@@ -37,7 +37,7 @@ export default function Home() {
         });
         if (decoded.eventName === "ContractDeployed") {
           const addr = (decoded.args as { contractAddress: string }).contractAddress;
-          router.push(`/address/${addr}`);
+          router.push(`/address?contract=${addr}`);
           return;
         }
       } catch {
@@ -134,7 +134,7 @@ export default function Home() {
                 {(myDeployments as string[]).map((addr: string) => (
                   <Link
                     key={addr}
-                    href={`/address/${addr}`}
+                    href={`/address?contract=${addr}`}
                     className="flex items-center gap-2 p-3 bg-base-300 rounded-lg hover:bg-base-100 transition-colors"
                   >
                     <Address address={addr as `0x${string}`} />
