@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Address } from "@scaffold-ui/components";
+import { Address, AddressInput } from "@scaffold-ui/components";
 import { decodeEventLog } from "viem";
 import { base } from "viem/chains";
 import { useAccount, useReadContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
@@ -135,23 +135,12 @@ export default function Home() {
           <div className="space-y-3">
             <div>
               <label className="text-sm font-semibold">Owner Address</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  className="input input-bordered w-full font-mono text-sm"
-                  placeholder="0x..."
-                  value={ownerInput}
-                  onChange={e => setOwnerInput(e.target.value)}
-                />
-                {connectedAddress && (
-                  <button
-                    className="btn btn-ghost btn-sm whitespace-nowrap"
-                    onClick={() => setOwnerInput(connectedAddress)}
-                  >
-                    Use my wallet
-                  </button>
-                )}
-              </div>
+              <AddressInput placeholder="0x... or ENS name" value={ownerInput} onChange={setOwnerInput} />
+              {connectedAddress && (
+                <button className="btn btn-ghost btn-xs mt-1" onClick={() => setOwnerInput(connectedAddress)}>
+                  Use my wallet
+                </button>
+              )}
             </div>
             <button
               className="btn btn-primary w-full"
