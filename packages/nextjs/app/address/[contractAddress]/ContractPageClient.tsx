@@ -137,13 +137,23 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
   const vestingAddress = contractAddress;
 
   // Read contract state
-  const { data: isLocked } = useReadContract({ address: vestingAddress, abi: VESTING_ABI, functionName: "isLocked" });
+  const { data: isLocked, refetch: refetchIsLocked } = useReadContract({
+    address: vestingAddress,
+    abi: VESTING_ABI,
+    functionName: "isLocked",
+    query: { refetchInterval: 5000 },
+  });
   const { data: vestedPct } = useReadContract({
     address: vestingAddress,
     abi: VESTING_ABI,
     functionName: "vestedPercent",
   });
-  const { data: lockStart } = useReadContract({ address: vestingAddress, abi: VESTING_ABI, functionName: "lockStart" });
+  const { data: lockStart } = useReadContract({
+    address: vestingAddress,
+    abi: VESTING_ABI,
+    functionName: "lockStart",
+    query: { refetchInterval: 5000 },
+  });
   const { data: vestDuration } = useReadContract({
     address: vestingAddress,
     abi: VESTING_ABI,
@@ -310,7 +320,7 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
   ] as const;
 
   // Read tokenId from the vesting contract
-  const { data: positionTokenId } = useReadContract({
+  const { data: positionTokenId, refetch: refetchPositionTokenId } = useReadContract({
     address: vestingAddress,
     abi: VESTING_ABI,
     functionName: "tokenId",
@@ -537,7 +547,21 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
   const wethApproveInProgress = wethApprovePending || wethApproveWaiting || wethApproveCooldown;
   const clawdApproveInProgress = clawdApprovePending || clawdApproveWaiting || clawdApproveCooldown;
 
-  const { writeContractAsync: writeLockUpRaw, isPending: lockUpMining } = useWriteContract();
+  const { writeContractAsync: writeLockUpRaw, isPending: lockUpMining, data: lockUpHash } = useWriteContract();
+  const { isLoading: lockUpWaiting, isSuccess: lockUpConfirmed } = useWaitForTransactionReceipt({
+    hash: lockUpHash,
+  });
+  const [lockUpCooldown, setLockUpCooldown] = useState(false);
+  const lockUpInProgress = lockUpMining || lockUpWaiting || lockUpCooldown;
+
+  useEffect(() => {
+    if (!lockUpConfirmed) return;
+    refetchIsLocked();
+    refetchPositionTokenId();
+    setLockUpCooldown(true);
+    const t = setTimeout(() => setLockUpCooldown(false), 5000);
+    return () => clearTimeout(t);
+  }, [lockUpConfirmed, refetchIsLocked, refetchPositionTokenId]);
   const writeLockUp = ({
     functionName,
     args,
@@ -614,13 +638,14 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
                     const isFullRange = posTickLower <= -887200 && posTickUpper >= 887200;
                     const inRange = lpCurrentTick >= posTickLower && lpCurrentTick <= posTickUpper;
 
-                    const prTrackCenter = (posTickLower + posTickUpper) / 2;
-                    let prHalfRange = Math.max((posTickUpper - posTickLower) * 0.75, TRACK_HALF_STEPS * TICK_SPACING);
-                    // Ensure current tick is visible
-                    const distFromCenter = Math.abs(lpCurrentTick - prTrackCenter);
-                    if (distFromCenter > prHalfRange * 0.9) {
-                      prHalfRange = distFromCenter * 1.2;
-                    }
+                    // Zoom to fit: center on the range + current tick, with padding
+                    const allVisibleTicks = [posTickLower, posTickUpper, lpCurrentTick];
+                    const viewMin = Math.min(...allVisibleTicks);
+                    const viewMax = Math.max(...allVisibleTicks);
+                    const viewSpan = Math.max(viewMax - viewMin, 1);
+                    const padding = Math.max(viewSpan * 0.4, (posTickUpper - posTickLower) * 0.4, 60);
+                    const prTrackCenter = (viewMin + viewMax) / 2;
+                    const prHalfRange = viewSpan / 2 + padding;
                     const prTrackMin = prTrackCenter - prHalfRange;
                     const prTrackMax = prTrackCenter + prHalfRange;
                     const prTickToPct = (tick: number) =>
@@ -1038,7 +1063,7 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
               {wethVestApproved && clawdVestApproved && (
                 <button
                   className="btn btn-accent w-full"
-                  disabled={lockUpMining || tickLower >= tickUpper || wethNeeded === 0n}
+                  disabled={lockUpInProgress || tickLower >= tickUpper || wethNeeded === 0n}
                   onClick={() =>
                     writeAndOpen(() =>
                       writeLockUp({
@@ -1056,11 +1081,22 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
                     )
                   }
                 >
-                  {lockUpMining && <span className="loading loading-spinner loading-sm mr-2" />}
-                  {lockUpMining ? "Locking..." : "🔒 Lock into Vesting"}
+                  {lockUpInProgress && <span className="loading loading-spinner loading-sm mr-2" />}
+                  {lockUpMining
+                    ? "Waiting for wallet..."
+                    : lockUpWaiting
+                      ? "Confirming..."
+                      : lockUpCooldown
+                        ? "Confirmed! Loading..."
+                        : "🔒 Lock into Vesting"}
                 </button>
               )}
             </div>
+            {lockUpConfirmed && (
+              <div className="alert alert-success mt-4">
+                <span>✅ Position locked into vesting! The page will update shortly.</span>
+              </div>
+            )}
           </div>
         )}
 
