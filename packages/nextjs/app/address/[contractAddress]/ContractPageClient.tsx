@@ -531,7 +531,7 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
     if (wethApproveConfirmed) {
       setWethApproveCooldown(true);
       refetchWethVestAllowance();
-      const t = setTimeout(() => setWethApproveCooldown(false), 4000);
+      const t = setTimeout(() => setWethApproveCooldown(false), 8000);
       return () => clearTimeout(t);
     }
   }, [wethApproveConfirmed, refetchWethVestAllowance]);
@@ -539,7 +539,7 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
     if (clawdApproveConfirmed) {
       setClawdApproveCooldown(true);
       refetchClawdVestAllowance();
-      const t = setTimeout(() => setClawdApproveCooldown(false), 4000);
+      const t = setTimeout(() => setClawdApproveCooldown(false), 8000);
       return () => clearTimeout(t);
     }
   }, [clawdApproveConfirmed, refetchClawdVestAllowance]);
@@ -1033,7 +1033,7 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
                       address: WETH_ADDRESS,
                       abi: WETH_ABI,
                       functionName: "approve",
-                      args: [vestingAddress!, wethNeeded],
+                      args: [vestingAddress!, (wethNeeded * 110n) / 100n],
                     });
                     setTimeout(openWallet, 2000);
                   }}
@@ -1051,7 +1051,7 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
                       address: CLAWD_ADDRESS,
                       abi: CLAWD_ABI,
                       functionName: "approve",
-                      args: [vestingAddress!, clawdNeeded],
+                      args: [vestingAddress!, (clawdNeeded * 110n) / 100n],
                     });
                     setTimeout(openWallet, 2000);
                   }}
