@@ -500,17 +500,42 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
   const clawdVestApproved =
     clawdVestAllowance !== undefined && (clawdVestAllowance as bigint) >= clawdNeeded && clawdNeeded > 0n;
 
-  const { writeContract: approveWethVest, data: approveWethHash } = useWriteContract();
-  const { isSuccess: wethApproveConfirmed } = useWaitForTransactionReceipt({ hash: approveWethHash });
-  const { writeContract: approveClawdVest, data: approveClawdHash } = useWriteContract();
-  const { isSuccess: clawdApproveConfirmed } = useWaitForTransactionReceipt({ hash: approveClawdHash });
+  const { writeContract: approveWethVest, data: approveWethHash, isPending: wethApprovePending } = useWriteContract();
+  const { isSuccess: wethApproveConfirmed, isLoading: wethApproveWaiting } = useWaitForTransactionReceipt({
+    hash: approveWethHash,
+  });
+  const {
+    writeContract: approveClawdVest,
+    data: approveClawdHash,
+    isPending: clawdApprovePending,
+  } = useWriteContract();
+  const { isSuccess: clawdApproveConfirmed, isLoading: clawdApproveWaiting } = useWaitForTransactionReceipt({
+    hash: approveClawdHash,
+  });
+
+  // Approve cooldown: keep button disabled for a few seconds after tx confirms while allowance refetches
+  const [wethApproveCooldown, setWethApproveCooldown] = useState(false);
+  const [clawdApproveCooldown, setClawdApproveCooldown] = useState(false);
 
   useEffect(() => {
-    if (wethApproveConfirmed) refetchWethVestAllowance();
+    if (wethApproveConfirmed) {
+      setWethApproveCooldown(true);
+      refetchWethVestAllowance();
+      const t = setTimeout(() => setWethApproveCooldown(false), 4000);
+      return () => clearTimeout(t);
+    }
   }, [wethApproveConfirmed, refetchWethVestAllowance]);
   useEffect(() => {
-    if (clawdApproveConfirmed) refetchClawdVestAllowance();
+    if (clawdApproveConfirmed) {
+      setClawdApproveCooldown(true);
+      refetchClawdVestAllowance();
+      const t = setTimeout(() => setClawdApproveCooldown(false), 4000);
+      return () => clearTimeout(t);
+    }
   }, [clawdApproveConfirmed, refetchClawdVestAllowance]);
+
+  const wethApproveInProgress = wethApprovePending || wethApproveWaiting || wethApproveCooldown;
+  const clawdApproveInProgress = clawdApprovePending || clawdApproveWaiting || clawdApproveCooldown;
 
   const { writeContractAsync: writeLockUpRaw, isPending: lockUpMining } = useWriteContract();
   const writeLockUp = ({
@@ -977,33 +1002,37 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
               {!wethVestApproved && (
                 <button
                   className="btn btn-primary w-full"
-                  disabled={wethNeeded === 0n}
-                  onClick={() =>
+                  disabled={wethNeeded === 0n || wethApproveInProgress}
+                  onClick={() => {
                     approveWethVest({
                       address: WETH_ADDRESS,
                       abi: WETH_ABI,
                       functionName: "approve",
                       args: [vestingAddress!, wethNeeded],
-                    })
-                  }
+                    });
+                    setTimeout(openWallet, 2000);
+                  }}
                 >
-                  1️⃣ Approve WETH
+                  {wethApproveInProgress && <span className="loading loading-spinner loading-sm mr-2" />}
+                  {wethApproveInProgress ? "Approving WETH..." : "1️⃣ Approve WETH"}
                 </button>
               )}
               {wethVestApproved && !clawdVestApproved && (
                 <button
                   className="btn btn-primary w-full"
-                  disabled={clawdNeeded === 0n}
-                  onClick={() =>
+                  disabled={clawdNeeded === 0n || clawdApproveInProgress}
+                  onClick={() => {
                     approveClawdVest({
                       address: CLAWD_ADDRESS,
                       abi: CLAWD_ABI,
                       functionName: "approve",
                       args: [vestingAddress!, clawdNeeded],
-                    })
-                  }
+                    });
+                    setTimeout(openWallet, 2000);
+                  }}
                 >
-                  2️⃣ Approve CLAWD
+                  {clawdApproveInProgress && <span className="loading loading-spinner loading-sm mr-2" />}
+                  {clawdApproveInProgress ? "Approving CLAWD..." : "2️⃣ Approve CLAWD"}
                 </button>
               )}
               {wethVestApproved && clawdVestApproved && (
@@ -1011,18 +1040,20 @@ export default function ContractPage({ contractAddress }: { contractAddress: `0x
                   className="btn btn-accent w-full"
                   disabled={lockUpMining || tickLower >= tickUpper || wethNeeded === 0n}
                   onClick={() =>
-                    writeLockUp({
-                      functionName: "lockUp",
-                      args: [
-                        wethNeeded,
-                        clawdNeeded,
-                        BigInt(Math.floor(vestDays * 86400)),
-                        tickLower,
-                        tickUpper,
-                        (wethNeeded * 95n) / 100n,
-                        (clawdNeeded * 95n) / 100n,
-                      ],
-                    })
+                    writeAndOpen(() =>
+                      writeLockUp({
+                        functionName: "lockUp",
+                        args: [
+                          wethNeeded,
+                          clawdNeeded,
+                          BigInt(Math.floor(vestDays * 86400)),
+                          tickLower,
+                          tickUpper,
+                          (wethNeeded * 95n) / 100n,
+                          (clawdNeeded * 95n) / 100n,
+                        ],
+                      }),
+                    )
                   }
                 >
                   {lockUpMining && <span className="loading loading-spinner loading-sm mr-2" />}
