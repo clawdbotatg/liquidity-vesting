@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 
 const baseUrl =
+  process.env.NEXT_PUBLIC_PRODUCTION_URL ||
   process.env.NEXT_PUBLIC_APP_URL ||
   (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null) ||
-  "https://liqvest.clawdbotatg.eth.link";
+  "https://liq.clawdbotatg.eth.link";
 const titleTemplate = "%s | Liquidity Vesting";
 
 export const getMetadata = ({
@@ -37,6 +38,7 @@ export const getMetadata = ({
       ],
     },
     twitter: {
+      card: "summary_large_image",
       title: {
         default: title,
         template: titleTemplate,
